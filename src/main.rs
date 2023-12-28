@@ -15,7 +15,7 @@ fn main() {
     let mut balas = Balas::new(&z, &constraints, &b);
 
     let start = Instant::now();
-    for _ in 0..1000 {
+    for _ in 0..100_000 {
         balas.solve();
     }
     println!("Elapsed time: {:?}", Instant::now() - start);

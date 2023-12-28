@@ -47,18 +47,20 @@ where
     }
 
     fn node(&mut self, branch: i32, index: usize, accumulator: &[T], objective: &T) {
-        // Get aliases for the current "column" of the cumulative constraints and
-        // the constraints.
-        let ccons = &self.cumulative[index];
-        let cons = &self.c[index];
-        let coeff = &self.coefficients[index];
-        let mut objective = *objective;
         let mut accumulator = accumulator.to_owned();
+        // Alias the current column of the cumulative constraints
+        let ccons = &self.cumulative[index];
 
         if branch == 1 {
+            // Alias the current column of the constraints
+            let cons = &self.c[index];
+
             // Update the current value of the objective
-            objective += coeff;
-            // If we're not better than the current best objective, then we can prune this entire branch,
+            let mut objective = *objective;
+            objective += &self.coefficients[index];
+
+            // If we're already not better than the current best objective, then
+            // we can prune this entire branch.
             if objective >= self.best {
                 return;
             }
@@ -79,8 +81,9 @@ where
             .zip(ccons)
             .all(|(&a, &b)| a + b >= T::zero())
         {
-            self.node(0, index + 1, &accumulator, &objective);
-            self.node(1, index + 1, &accumulator, &objective);
+            let next_index = index + 1;
+            self.node(0, next_index, &accumulator, &objective);
+            self.node(1, next_index, &accumulator, &objective);
         }
     }
 
