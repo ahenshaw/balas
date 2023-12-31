@@ -1,5 +1,6 @@
 mod lpformat;
 
+use bit_vec::BitVec;
 use num::Bounded;
 use std::{fmt::Display, ops::Neg};
 
@@ -11,7 +12,7 @@ pub struct Balas<T> {
     rhs: Vec<T>,
     cumulative: Array<T>,
     best: T,
-    solution: Vec<u8>,
+    solution: BitVec,
     count: usize,
 }
 
@@ -35,7 +36,7 @@ where
             rhs: b.to_vec(),
             cumulative,
             best: T::max_value(),
-            solution: vec![],
+            solution: BitVec::new(),
             count: 0,
         }
     }
@@ -45,20 +46,20 @@ where
         // right-hand side of the constraints).  This way, we can just compare against 0
         // later on.
         let accumulator: Vec<T> = self.rhs.clone().into_iter().map(|a| -a).collect();
-
-        self.node(0, 0, &accumulator, &T::zero(), &[]);
-        self.node(1, 0, &accumulator, &T::zero(), &[]);
+        let vars = BitVec::from_elem(self.coefficients.len(), false);
+        self.node(0, 0, &accumulator, &T::zero(), &vars);
+        self.node(1, 0, &accumulator, &T::zero(), &vars);
     }
 
-    fn node(&mut self, branch: u8, index: usize, accumulator: &[T], objective: &T, vars: &[u8]) {
+    fn node(&mut self, branch: u8, index: usize, accumulator: &[T], objective: &T, vars: &BitVec) {
         let mut objective = *objective;
-        let mut vars: Vec<u8> = vars.to_owned();
-        vars.push(branch);
+        let mut vars = vars.to_owned();
         let mut accumulator = accumulator.to_owned();
         // Alias the current column of the cumulative constraints
         let ccons = &self.cumulative[index];
 
         if branch == 1 {
+            vars.set(index, true);
             // Alias the current column of the constraints
             let cons = &self.constraints[index];
 
@@ -94,11 +95,7 @@ where
     }
 
     pub fn report(&self) {
-        let mut solution = self.solution.to_owned();
-        for _ in 0..self.coefficients.len() - self.solution.len() {
-            solution.push(0);
-        }
-        println!("Minimum value: {} {:?}", self.best, solution);
+        println!("Minimum value: {} {:?}", self.best, self.solution);
         println!("Examined {:?} nodes", self.count);
     }
 
