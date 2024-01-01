@@ -38,11 +38,13 @@ impl Balas<f64> {
         }
 
         let coefficients: Vec<f64>;
+        let vars: Vec<String>;
         let index: std::collections::HashMap<String, usize>;
         if let Some(objective) = lp.objectives.first() {
             // sort the variables by coefficient
             let mut obj: Vec<_> = objective.coefficients.iter().collect();
             obj.sort_by(|a, b| a.coefficient.partial_cmp(&b.coefficient).unwrap());
+            vars = obj.iter().map(|v| v.var_name.to_owned()).collect();
 
             // Create mapping from variable name to constraints column (visually)
             // For the solver, the constraints are transposed (for efficiency), so the index
@@ -86,6 +88,6 @@ impl Balas<f64> {
                 _ => return Err(Errors::UnexpectedConstraintType),
             }
         }
-        Ok(Balas::new(&coefficients, &constraints, &rhs))
+        Ok(Balas::new(&coefficients, &constraints, &rhs, &vars))
     }
 }

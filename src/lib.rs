@@ -14,6 +14,7 @@ pub struct Balas<T> {
     best: T,
     solution: BitVec,
     count: usize,
+    vars: Vec<String>,
 }
 
 impl<T> Balas<T>
@@ -28,7 +29,7 @@ where
         + std::fmt::Debug,
     Vec<T>: FromIterator<<T as Neg>::Output>,
 {
-    pub fn new(coeff: &[T], c: &Array<T>, b: &[T]) -> Balas<T> {
+    pub fn new(coeff: &[T], c: &Array<T>, b: &[T], vars: &Vec<String>) -> Balas<T> {
         let cumulative = Self::make_cumulative(c);
         Balas {
             coefficients: coeff.to_vec(),
@@ -38,6 +39,7 @@ where
             best: T::max_value(),
             solution: BitVec::new(),
             count: 0,
+            vars: vars.to_owned(),
         }
     }
 
@@ -52,6 +54,7 @@ where
     }
 
     fn node(&mut self, branch: u8, index: usize, accumulator: &[T], objective: &T, vars: &BitVec) {
+        self.count += 1;
         let mut objective = *objective;
         let mut vars = vars.to_owned();
         let mut accumulator = accumulator.to_owned();
@@ -95,7 +98,11 @@ where
     }
 
     pub fn report(&self) {
-        println!("Minimum value: {} {:?}", self.best, self.solution);
+        println!("Minimum value: {}", self.best);
+        println!("Solution:");
+        for (var, value) in self.vars.iter().zip(self.solution.iter()) {
+            println!("  {var}: {}", value as u8);
+        }
         println!("Examined {:?} nodes", self.count);
     }
 
