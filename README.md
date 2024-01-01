@@ -1,6 +1,6 @@
-Balas Additive algorithm implemented in Rust.
+Balas Additive algorithm implemented in Rust.  
 
-```cargo run <LP-format file>```
+This is not yet ready for release.
 
 The Balas Additive algorithm solves binary-variable linear programming problems.  In addition to requiring that
 all of the variables must be binary, the algorithm places other limitations on the formulation of the problem (which can 
