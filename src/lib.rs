@@ -111,11 +111,16 @@ where
     }
 
     pub fn report(&self) {
-        println!("Minimum value: {}", self.best);
-        println!("Solution:");
-        for (var, value) in self.vars.iter().zip(self.solution.iter()) {
-            println!("  {var}: {}", value as u8);
+        if self.best != T::max_value() {
+            println!("Minimum value: {}", self.best);
+            println!("Solution:");
+            for (var, value) in self.vars.iter().zip(self.solution.iter()) {
+                println!("  {var}: {}", value as u8);
+            }
+        } else {
+            println!("No solution");
         }
+
         println!("Examined {:?} nodes", self.count);
     }
 

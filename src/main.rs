@@ -13,6 +13,9 @@ struct Args {
     /// input file in LP format
     #[argh(positional)]
     infile: PathBuf,
+    /// how many repetitions (for timing)
+    #[argh(option, short = 'r', default = "1")]
+    reps: usize,
 }
 
 fn main() -> Result<()> {
@@ -23,11 +26,15 @@ fn main() -> Result<()> {
     let mut balas = Balas::from_lp(&lp)?;
 
     let start = Instant::now();
-    for _ in 0..1_000_000 {
+    for _ in 0..args.reps {
         balas.reset();
         balas.solve();
     }
-    println!("Elapsed time: {:?}", Instant::now() - start);
+    println!(
+        "Elapsed time: {:?} (repetitions: {})",
+        Instant::now() - start,
+        args.reps
+    );
     balas.report();
 
     Ok(())
