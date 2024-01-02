@@ -1,40 +1,28 @@
+use crate::lp_errors::LpErrors;
 use crate::Balas;
 use lp_parser_rs::model::constraint::Constraint;
-use lp_parser_rs::model::lp_problem::LPProblem;
 use lp_parser_rs::model::sense::Sense;
 use lp_parser_rs::model::variable::VariableType;
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum Errors {
-    #[error("All variables must be Binary")]
-    VarNotBinary,
-    #[error("No variables found")]
-    NoVars,
-    #[error("All constraints must be greater-than-or equal (TO-DO: remove this restriction)")]
-    AllSenseGE,
-    #[error("Must be a minimization problem (TO-DO: remove this restriction)")]
-    ProblemSenseNotMinimize,
-    #[error("Expected objective")]
-    NoObjective,
-    #[error("Coefficients must be positive (TO-DO: remove this restriction)")]
-    NegativeCoefficient,
-    #[error("Can only handle Standard constraints")]
-    UnexpectedConstraintType,
-}
+use lp_parser_rs::parse::parse_lp_file;
+use std::fs;
+use std::path::Path;
 
 impl Balas<f64> {
-    pub fn from_lp(lp: &LPProblem) -> Result<Balas<f64>, Errors> {
+    pub fn from_lp(lp_path: &Path) -> Result<Balas<f64>, LpErrors> {
+        let code = fs::read_to_string(lp_path).map_err(LpErrors::FileReadError)?;
+        let lp = parse_lp_file(&code).map_err(LpErrors::LPParseError)?;
+        dbg!(&lp);
+
         // LP binary problem normalization checks
         if lp.problem_sense != Sense::Minimize {
-            return Err(Errors::ProblemSenseNotMinimize);
+            return Err(LpErrors::ProblemSenseNotMinimize);
         }
         if lp
             .variables
             .iter()
             .any(|(_, vtype)| *vtype != VariableType::Binary)
         {
-            return Err(Errors::VarNotBinary);
+            return Err(LpErrors::VarNotBinary);
         }
 
         let coefficients: Vec<f64>;
@@ -58,10 +46,10 @@ impl Balas<f64> {
 
             coefficients = obj.iter().map(|c| c.coefficient).collect()
         } else {
-            return Err(Errors::NoObjective);
+            return Err(LpErrors::NoObjective);
         }
         if coefficients.iter().any(|&x| x < 0.0) {
-            return Err(Errors::NegativeCoefficient);
+            return Err(LpErrors::NegativeCoefficient);
         }
         let num_vars = lp.variables.len();
         let num_constraints = lp.constraints.len();
@@ -82,7 +70,7 @@ impl Balas<f64> {
                         }
                     }
                 }
-                _ => return Err(Errors::UnexpectedConstraintType),
+                _ => return Err(LpErrors::UnexpectedConstraintType),
             }
         }
         Ok(Balas::new(&coefficients, &constraints, &rhs, &vars))

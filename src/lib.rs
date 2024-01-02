@@ -1,4 +1,5 @@
-mod lpformat;
+mod lp_errors;
+mod lp_format;
 
 use bit_vec::BitVec;
 use num::Bounded;
@@ -93,7 +94,7 @@ where
             // If all of constraints are satisfied, then we are fathomed and we can't do any better.
             accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a += b);
             if accumulator.iter().all(|a| *a >= T::zero()) {
-                // println!("New best objective: {} {:?}", objective, vars);
+                println!("New best objective: {} {:?}", objective, vars);
                 self.best = objective;
                 self.solution = vars;
                 return;
