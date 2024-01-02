@@ -29,11 +29,12 @@ where
         + std::fmt::Debug,
     Vec<T>: FromIterator<<T as Neg>::Output>,
 {
-    pub fn new(coeff: &[T], c: &Array<T>, b: &[T], vars: &Vec<String>) -> Balas<T> {
-        let cumulative = Self::make_cumulative(c);
+    pub fn new(coeff: &[T], constraints: &Array<T>, b: &[T], vars: &Vec<String>) -> Balas<T> {
+        let cumulative = Self::make_cumulative(constraints);
+        dbg!(&constraints);
         Balas {
             coefficients: coeff.to_vec(),
-            constraints: c.clone(),
+            constraints: constraints.clone(),
             rhs: b.to_vec(),
             cumulative,
             best: T::max_value(),
@@ -60,6 +61,10 @@ where
         let mut accumulator = accumulator.to_owned();
         // Alias the current column of the cumulative constraints
         let ccons = &self.cumulative[index];
+
+        // let Some(ccons) = self.cumulative.get(index) else {
+        //     return;
+        // };
 
         if branch == 1 {
             vars.set(index, true);
