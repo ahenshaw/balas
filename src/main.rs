@@ -23,9 +23,10 @@ fn main() -> Result<()> {
     let mut balas = Balas::from_lp(&lp)?;
 
     let start = Instant::now();
-    // for _ in 0..100_000 {
-    balas.solve();
-    // }
+    for _ in 0..1_000_000 {
+        balas.reset();
+        balas.solve();
+    }
     println!("Elapsed time: {:?}", Instant::now() - start);
     balas.report();
 

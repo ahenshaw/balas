@@ -31,7 +31,10 @@ where
 {
     pub fn new(coeff: &[T], constraints: &Array<T>, b: &[T], vars: &Vec<String>) -> Balas<T> {
         let cumulative = Self::make_cumulative(constraints);
-        dbg!(&constraints);
+        // dbg!(&coeff);
+        // dbg!(&constraints);
+        // dbg!(&b);
+        // dbg!(&vars);
         Balas {
             coefficients: coeff.to_vec(),
             constraints: constraints.clone(),
@@ -43,6 +46,11 @@ where
             vars: vars.to_owned(),
         }
     }
+    pub fn reset(&mut self) {
+        self.count = 0;
+        self.best = T::max_value();
+        self.solution = BitVec::new();
+    }
 
     pub fn solve(&mut self) {
         // Initialize the constraint accumulator with the negation of the b vector (the
@@ -50,21 +58,21 @@ where
         // later on.
         let accumulator: Vec<T> = self.rhs.clone().into_iter().map(|a| -a).collect();
         let vars = BitVec::from_elem(self.coefficients.len(), false);
-        self.node(0, 0, &accumulator, &T::zero(), &vars);
         self.node(1, 0, &accumulator, &T::zero(), &vars);
+        self.node(0, 0, &accumulator, &T::zero(), &vars);
     }
 
     fn node(&mut self, branch: u8, index: usize, accumulator: &[T], objective: &T, vars: &BitVec) {
-        self.count += 1;
         let mut objective = *objective;
         let mut vars = vars.to_owned();
         let mut accumulator = accumulator.to_owned();
         // Alias the current column of the cumulative constraints
-        let ccons = &self.cumulative[index];
+        // let ccons = &self.cumulative[index];
 
-        // let Some(ccons) = self.cumulative.get(index) else {
-        //     return;
-        // };
+        let Some(ccons) = self.cumulative.get(index) else {
+            return;
+        };
+        self.count += 1;
 
         if branch == 1 {
             vars.set(index, true);
@@ -97,8 +105,8 @@ where
             .zip(ccons)
             .all(|(&a, &b)| a + b >= T::zero())
         {
-            self.node(0, index + 1, &accumulator, &objective, &vars);
             self.node(1, index + 1, &accumulator, &objective, &vars);
+            self.node(0, index + 1, &accumulator, &objective, &vars);
         }
     }
 

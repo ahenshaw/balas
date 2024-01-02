@@ -49,17 +49,14 @@ impl Balas<f64> {
             // Create mapping from variable name to constraints column (visually)
             // For the solver, the constraints are transposed (for efficiency), so the index
             // maps to a row index.
+
             index = obj
                 .iter()
                 .enumerate()
                 .map(|(i, c)| (c.var_name.to_owned(), i))
                 .collect();
 
-            coefficients = objective
-                .coefficients
-                .iter()
-                .map(|c| c.coefficient)
-                .collect()
+            coefficients = obj.iter().map(|c| c.coefficient).collect()
         } else {
             return Err(Errors::NoObjective);
         }
