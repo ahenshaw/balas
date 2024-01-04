@@ -70,10 +70,8 @@ where
         // Alias the current column of the cumulative constraints
         // let ccons = &self.cumulative[index];
 
-        let Some(ccons) = self.cumulative.get(index) else {
-            return;
-        };
         self.count += 1;
+        // println!("count:{}  branch:{branch}  index:{index}  objective:{objective}  accumulator:{accumulator:?}", self.count);
 
         if branch == 1 {
             vars.set(index, true);
@@ -86,6 +84,7 @@ where
             // If we're already not better than the current best objective, then
             // we can prune this entire branch.
             if objective >= self.best {
+                // println!("fathomed");
                 return;
             }
 
@@ -94,13 +93,18 @@ where
             // If all of constraints are satisfied, then we are fathomed and we can't do any better.
             accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a += b);
             if accumulator.iter().all(|a| *a >= T::zero()) {
-                println!("New best objective: {} {:?}", objective, vars);
+                // println!("New best objective: {} {:?}", objective, vars);
                 self.best = objective;
                 self.solution = vars;
                 return;
             }
         }
         // If there is a potentially feasible descendant, then spawn 0 and 1 child nodes
+        let Some(ccons) = self.cumulative.get(index) else {
+            // println!("run out of vars with index: {index}");
+            return;
+        };
+
         if accumulator
             .iter()
             .zip(ccons)

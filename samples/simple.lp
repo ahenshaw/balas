@@ -3,9 +3,7 @@
 Minimize
 x + 10 y
 Subject To
-r01: x + y  >= 1
-
+x + y  >= 1
 Binaries
-
  x y
 End

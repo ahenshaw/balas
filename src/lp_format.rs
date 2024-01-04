@@ -3,9 +3,11 @@ use crate::Balas;
 use lp_parser_rs::model::coefficient::Coefficient;
 use lp_parser_rs::model::constraint::Constraint;
 use lp_parser_rs::model::lp_problem::LPProblem;
+use lp_parser_rs::model::objective::Objective;
 use lp_parser_rs::model::sense::Sense;
 use lp_parser_rs::model::variable::VariableType;
 use lp_parser_rs::parse::parse_lp_file;
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -13,19 +15,10 @@ impl Balas<f64> {
     pub fn from_lp(lp_path: &Path) -> Result<Balas<f64>, LpErrors> {
         let code = fs::read_to_string(lp_path).map_err(LpErrors::FileReadError)?;
         let lp = parse_lp_file(&code).map_err(LpErrors::LPParseError)?;
-        dbg!(&lp);
 
-        // LP binary problem normalization checks
-        if lp.problem_sense != Sense::Minimize {
-            return Err(LpErrors::ProblemSenseNotMinimize);
-        }
-        if lp
-            .variables
-            .iter()
-            .any(|(_, vtype)| *vtype != VariableType::Binary)
-        {
-            return Err(LpErrors::VarNotBinary);
-        }
+        let lp = normalize_for_balas(&lp)?;
+
+        // dbg!(&lp);
 
         let coefficients: Vec<f64>;
         let vars: Vec<String>;
@@ -50,9 +43,7 @@ impl Balas<f64> {
         } else {
             return Err(LpErrors::NoObjective);
         }
-        if coefficients.iter().any(|&x| x < 0.0) {
-            return Err(LpErrors::NegativeCoefficient);
-        }
+
         let num_vars = lp.variables.len();
         let num_constraints = lp.constraints.len();
         let mut constraints: Vec<_> = (0..num_vars).map(|_| vec![0.0; num_constraints]).collect();
@@ -75,47 +66,146 @@ impl Balas<f64> {
                 _ => return Err(LpErrors::UnexpectedConstraintType),
             }
         }
+        // dbg!(&coefficients);
+        // dbg!(&constraints);
+        // dbg!(&rhs);
+        // dbg!(&vars);
         Ok(Balas::new(&coefficients, &constraints, &rhs, &vars))
     }
 }
 
-/// The Balas algorithm requires that all constraints be of
-/// the >= sense.  So, this function will convert <= sense
-/// constraints to >= by negating the coefficients and the rhs.
-/// Equality constraints need to have a negated constraint added.
-fn make_all_constraints_ge(lp: &mut LPProblem) {
-    let mut additional: Vec<Constraint> = vec![];
-    for (label, constraint) in lp.constraints.iter_mut() {
-        if let Constraint::Standard {
-            name,
-            coefficients: ref mut coeff_ref,
-            sense: ref mut sense_ref,
-            mut rhs,
-        } = constraint
-        {
-            match sense_ref.as_str() {
-                "<=" => {
-                    *sense_ref = ">=".to_owned();
-                    rhs = -rhs;
-                    coeff_ref
-                        .iter_mut()
-                        .for_each(|c| c.coefficient = -c.coefficient);
-                }
-                "=" => {
-                    // change over "=" to ">="
-                    *sense_ref = ">=".to_owned();
+/// The Balas algorithm requires that:
+/// - the problem sense must be "minimize".  A "maximize" sense
+///     will be converted by negating the objective coefficients.
+/// - all constraints be of the >= sense.  So, this function
+///     will convert <= sense constraints to >= by negating
+///     the coefficients and the rhs. Equality constraints
+///     need to have a negated constraint added.
+/// - all objective coefficients must be positive.  Negative
+///     coefficients will be converted by replacing "x"
+///     with "y = 1 - x"
+///
+fn normalize_for_balas(lp: &LPProblem) -> Result<LPProblem, LpErrors> {
+    let problem_name = format!("{}_balas", lp.problem_name);
+    let objectives = create_min_objectives(&lp);
+    let constraints = create_ge_constraints(&lp)?;
 
-                    // create negated copy of constraint
-                    let mut new_coeff: Vec<Coefficient> = coeff_ref
+    // copy variables while making sure they all are binary
+    let mut variables = HashMap::new();
+    for (s, vtype) in &lp.variables {
+        if *vtype != VariableType::Binary {
+            return Err(LpErrors::VarNotBinary);
+        }
+        variables.insert(s.clone(), VariableType::Binary);
+    }
+
+    Ok(LPProblem {
+        problem_name,
+        problem_sense: Sense::Minimize,
+        variables,
+        objectives,
+        constraints,
+    })
+}
+fn create_ge_constraints(lp: &LPProblem) -> Result<HashMap<String, Constraint>, LpErrors> {
+    // make all constraints be of the >= sense
+    let mut additional: Vec<(String, Constraint)> = vec![];
+    let mut constraints: HashMap<String, Constraint> = lp
+        .constraints
+        .iter()
+        .map(|(label, constraint)| {
+            match constraint {
+                Constraint::Standard {
+                    name,
+                    coefficients,
+                    sense,
+                    rhs,
+                } => {
+                    let mut my_sense = sense.to_owned();
+                    let mut my_coefficients: Vec<Coefficient> = coefficients
                         .iter()
                         .map(|c| Coefficient {
                             var_name: c.var_name.clone(),
-                            coefficient: -c.coefficient,
+                            coefficient: c.coefficient.clone(),
                         })
                         .collect();
+                    let mut my_rhs = *rhs;
+                    match sense.as_str() {
+                        "<=" => {
+                            my_sense = ">=".to_owned();
+                            my_rhs = -rhs;
+                            my_coefficients
+                                .iter_mut()
+                                .for_each(|c| c.coefficient = -c.coefficient);
+                        }
+                        "=" => {
+                            // change over "=" to ">="
+                            my_sense = ">=".to_owned();
+
+                            // create negated copy of constraint
+                            let new_coeff: Vec<Coefficient> = my_coefficients
+                                .iter()
+                                .map(|c| Coefficient {
+                                    var_name: c.var_name.clone(),
+                                    coefficient: -c.coefficient,
+                                })
+                                .collect();
+                            additional.push((
+                                format!("{}_balas", label),
+                                Constraint::Standard {
+                                    name: format!("{}_balas", name),
+                                    coefficients: new_coeff,
+                                    sense: ">=".to_owned(),
+                                    rhs: -rhs,
+                                },
+                            ));
+                        }
+                        _ => {}
+                    }
+                    (
+                        label.to_owned(),
+                        Constraint::Standard {
+                            name: name.to_owned(),
+                            coefficients: my_coefficients,
+                            sense: my_sense,
+                            rhs: my_rhs,
+                        },
+                    )
                 }
-                _ => (),
+                _ => unimplemented!(),
             }
-        }
+        })
+        .collect();
+    for (label, constraint) in additional {
+        constraints.insert(label, constraint);
     }
+    Ok(constraints)
+}
+
+fn create_min_objectives(lp: &LPProblem) -> Vec<Objective> {
+    let negate = lp.problem_sense == Sense::Maximize;
+    lp.objectives
+        .iter()
+        .map(|objective| {
+            let outer: Vec<Coefficient> = objective
+                .coefficients
+                .iter()
+                .map(|c| {
+                    let coeff = if negate {
+                        -c.coefficient
+                    } else {
+                        c.coefficient
+                    };
+                    Coefficient {
+                        var_name: c.var_name.clone(),
+                        coefficient: coeff,
+                    }
+                })
+                .collect();
+            Objective {
+                name: objective.name.clone(),
+                coefficients: outer,
+            }
+        })
+        .collect()
 }
