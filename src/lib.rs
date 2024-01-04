@@ -1,5 +1,5 @@
 mod lp_errors;
-mod lp_format;
+mod lp_reader;
 
 use bit_vec::BitVec;
 use num::Bounded;

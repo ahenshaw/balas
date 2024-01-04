@@ -87,8 +87,8 @@ impl Balas<f64> {
 ///
 fn normalize_for_balas(lp: &LPProblem) -> Result<LPProblem, LpErrors> {
     let problem_name = format!("{}_balas", lp.problem_name);
-    let objectives = create_min_objectives(&lp);
-    let constraints = create_ge_constraints(&lp)?;
+    let objectives = create_min_objectives(lp);
+    let constraints = create_ge_constraints(lp)?;
 
     // copy variables while making sure they all are binary
     let mut variables = HashMap::new();
@@ -126,7 +126,7 @@ fn create_ge_constraints(lp: &LPProblem) -> Result<HashMap<String, Constraint>, 
                         .iter()
                         .map(|c| Coefficient {
                             var_name: c.var_name.clone(),
-                            coefficient: c.coefficient.clone(),
+                            coefficient: c.coefficient,
                         })
                         .collect();
                     let mut my_rhs = *rhs;
