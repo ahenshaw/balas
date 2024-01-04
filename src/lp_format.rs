@@ -1,6 +1,8 @@
 use crate::lp_errors::LpErrors;
 use crate::Balas;
+use lp_parser_rs::model::coefficient::Coefficient;
 use lp_parser_rs::model::constraint::Constraint;
+use lp_parser_rs::model::lp_problem::LPProblem;
 use lp_parser_rs::model::sense::Sense;
 use lp_parser_rs::model::variable::VariableType;
 use lp_parser_rs::parse::parse_lp_file;
@@ -74,5 +76,46 @@ impl Balas<f64> {
             }
         }
         Ok(Balas::new(&coefficients, &constraints, &rhs, &vars))
+    }
+}
+
+/// The Balas algorithm requires that all constraints be of
+/// the >= sense.  So, this function will convert <= sense
+/// constraints to >= by negating the coefficients and the rhs.
+/// Equality constraints need to have a negated constraint added.
+fn make_all_constraints_ge(lp: &mut LPProblem) {
+    let mut additional: Vec<Constraint> = vec![];
+    for (label, constraint) in lp.constraints.iter_mut() {
+        if let Constraint::Standard {
+            name,
+            coefficients: ref mut coeff_ref,
+            sense: ref mut sense_ref,
+            mut rhs,
+        } = constraint
+        {
+            match sense_ref.as_str() {
+                "<=" => {
+                    *sense_ref = ">=".to_owned();
+                    rhs = -rhs;
+                    coeff_ref
+                        .iter_mut()
+                        .for_each(|c| c.coefficient = -c.coefficient);
+                }
+                "=" => {
+                    // change over "=" to ">="
+                    *sense_ref = ">=".to_owned();
+
+                    // create negated copy of constraint
+                    let mut new_coeff: Vec<Coefficient> = coeff_ref
+                        .iter()
+                        .map(|c| Coefficient {
+                            var_name: c.var_name.clone(),
+                            coefficient: -c.coefficient,
+                        })
+                        .collect();
+                }
+                _ => (),
+            }
+        }
     }
 }
