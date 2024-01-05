@@ -117,7 +117,7 @@ where
 
     pub fn report(&self) {
         if self.best != T::max_value() {
-            println!("Minimum value: {}", self.best);
+            println!("Optimal value: {}", self.best);
             println!("Solution:");
             for (var, value) in self.vars.iter().zip(self.solution.iter()) {
                 println!("  {var}: {}", value as u8);

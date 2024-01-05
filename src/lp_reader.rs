@@ -9,8 +9,9 @@ use lp_parser_rs::model::variable::VariableType;
 use lp_parser_rs::parse::parse_lp_file;
 use std::collections::HashMap;
 use std::fs;
-use std::ops::RangeBounds;
 use std::path::Path;
+
+type Constraints = HashMap<String, Constraint>;
 
 impl Balas<f64> {
     pub fn from_lp(lp_path: &Path) -> Result<Balas<f64>, LpErrors> {
@@ -90,7 +91,7 @@ fn normalize_for_balas(lp: &LPProblem) -> Result<LPProblem, LpErrors> {
     let problem_name = format!("{}_balas", lp.problem_name);
     let objective = create_min_objective(lp)?;
     let constraints = create_ge_constraints(lp)?;
-    fix_neg_variables(&mut objective, &mut constraints);
+    let (objective, constraints) = fix_neg_variables(&objective, &constraints);
 
     // copy variables while making sure they all are binary
     let mut variables = HashMap::new();
@@ -110,37 +111,68 @@ fn normalize_for_balas(lp: &LPProblem) -> Result<LPProblem, LpErrors> {
     })
 }
 
-fn fix_neg_variables(objective: &mut Objective, constraints: &mut HashMap<String, Constraint>) {
+fn fix_neg_variables(objective: &Objective, constraints: &Constraints) -> (Objective, Constraints) {
     let mut to_change = Vec::<&str>::new();
-    for coeff_var in &mut objective.coefficients {
+
+    let mut coeff: Vec<Coefficient> = vec![];
+    for coeff_var in &objective.coefficients {
+        let mut c = coeff_var.coefficient;
         if coeff_var.coefficient < 0.0 {
-            coeff_var.coefficient = -coeff_var.coefficient;
+            c = -c;
             to_change.push(&coeff_var.var_name);
         }
+        coeff.push(Coefficient {
+            var_name: coeff_var.var_name.clone(),
+            coefficient: c,
+        });
     }
-    for (label, ref constraint) in constraints {
-        for &var in &to_change {
-            if let Constraint::Standard {
-                name: _,
-                mut coefficients,
-                sense: _,
-                mut rhs,
-            } = constraint
-            {
-                for coeff in &mut coefficients {
-                    if coeff.var_name == var {
-                        rhs -= coeff.coefficient;
-                        coeff.coefficient = -coeff.coefficient;
+    let objective = Objective {
+        name: objective.name.clone(),
+        coefficients: coeff,
+    };
+
+    let mut new_constraints = Constraints::new();
+    for (label, constraint) in constraints {
+        if let Constraint::Standard {
+            name,
+            coefficients,
+            sense,
+            rhs,
+        } = constraint
+        {
+            let mut rhs = *rhs;
+            let mut coefficients: Vec<Coefficient> = coefficients
+                .iter()
+                .map(|c| Coefficient {
+                    var_name: c.var_name.clone(),
+                    coefficient: c.coefficient,
+                })
+                .collect();
+
+            for &var_name in &to_change {
+                coefficients.iter_mut().for_each(|c| {
+                    if c.var_name == var_name {
+                        rhs -= c.coefficient;
+                        c.coefficient = -c.coefficient;
                     }
-                }
+                });
             }
+            let new_constraint = Constraint::Standard {
+                name: name.to_owned(),
+                coefficients,
+                sense: sense.to_owned(),
+                rhs,
+            };
+            new_constraints.insert(label.clone(), new_constraint);
         }
     }
+    (objective, new_constraints)
 }
-fn create_ge_constraints(lp: &LPProblem) -> Result<HashMap<String, Constraint>, LpErrors> {
+
+fn create_ge_constraints(lp: &LPProblem) -> Result<Constraints, LpErrors> {
     // make all constraints be of the >= sense
     let mut additional: Vec<(String, Constraint)> = vec![];
-    let mut constraints: HashMap<String, Constraint> = lp
+    let mut constraints: Constraints = lp
         .constraints
         .iter()
         .map(|(label, constraint)| {
