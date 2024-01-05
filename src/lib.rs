@@ -20,14 +20,7 @@ pub struct Balas<T> {
 
 impl<T> Balas<T>
 where
-    T: Bounded
-        + Neg
-        + Copy
-        + Display
-        + num::Zero
-        + for<'a> std::ops::AddAssign<&'a T>
-        + std::cmp::PartialOrd
-        + std::fmt::Debug,
+    T: Bounded + Neg + Copy + Display + num::Zero + for<'a> std::ops::AddAssign<&'a T> + std::cmp::PartialOrd + std::fmt::Debug,
     Vec<T>: FromIterator<<T as Neg>::Output>,
 {
     pub fn new(coeff: &[T], constraints: &Array<T>, b: &[T], vars: &Vec<String>) -> Balas<T> {
@@ -101,11 +94,7 @@ where
             }
         }
         // If there is a potentially feasible descendant, then spawn 0 and 1 child nodes
-        if accumulator
-            .iter()
-            .zip(ccons)
-            .all(|(&a, &b)| a + b >= T::zero())
-        {
+        if accumulator.iter().zip(ccons).all(|(&a, &b)| a + b >= T::zero()) {
             self.node(1, index + 1, &accumulator, &objective, &vars);
             self.node(0, index + 1, &accumulator, &objective, &vars);
         }

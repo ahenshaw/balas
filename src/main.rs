@@ -1,8 +1,7 @@
 use anyhow::Result;
 use argh::FromArgs;
 use balas::Balas;
-use std::path::PathBuf;
-use std::time::Instant;
+use std::{path::PathBuf, time::Instant};
 
 #[derive(FromArgs)]
 /// Solve a Binary-Variable Linear Program
@@ -25,11 +24,7 @@ fn main() -> Result<()> {
         balas.reset();
         balas.solve();
     }
-    println!(
-        "Elapsed time: {:?} (repetitions: {})",
-        Instant::now() - start,
-        args.reps
-    );
+    println!("Elapsed time: {:?} (repetitions: {})", Instant::now() - start, args.reps);
     balas.report();
 
     Ok(())
