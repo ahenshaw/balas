@@ -1,11 +1,9 @@
-use crate::lp_errors::LpErrors;
-use crate::Balas;
-use lp_parser_rs::model::constraint::Constraint;
-use lp_parser_rs::model::sense::Sense;
-use lp_parser_rs::model::variable::VariableType;
-use lp_parser_rs::parse::parse_lp_file;
-use std::fs;
-use std::path::Path;
+use crate::{lp_errors::LpErrors, Balas};
+use lp_parser_rs::{
+    model::{constraint::Constraint, sense::Sense, variable::VariableType},
+    parse::parse_lp_file,
+};
+use std::{fs, path::Path};
 
 impl Balas<f64> {
     pub fn from_lp(lp_path: &Path) -> Result<Balas<f64>, LpErrors> {
@@ -17,11 +15,7 @@ impl Balas<f64> {
         if lp.problem_sense != Sense::Minimize {
             return Err(LpErrors::ProblemSenseNotMinimize);
         }
-        if lp
-            .variables
-            .iter()
-            .any(|(_, vtype)| *vtype != VariableType::Binary)
-        {
+        if lp.variables.iter().any(|(_, vtype)| *vtype != VariableType::Binary) {
             return Err(LpErrors::VarNotBinary);
         }
 
@@ -38,11 +32,7 @@ impl Balas<f64> {
             // For the solver, the constraints are transposed (for efficiency), so the index
             // maps to a row index.
 
-            index = obj
-                .iter()
-                .enumerate()
-                .map(|(i, c)| (c.var_name.to_owned(), i))
-                .collect();
+            index = obj.iter().enumerate().map(|(i, c)| (c.var_name.to_owned(), i)).collect();
 
             coefficients = obj.iter().map(|c| c.coefficient).collect()
         } else {
@@ -57,12 +47,7 @@ impl Balas<f64> {
         let mut rhs = vec![];
         for (col, (_, constraint)) in lp.constraints.iter().enumerate() {
             match constraint {
-                Constraint::Standard {
-                    name: _,
-                    coefficients,
-                    sense: _,
-                    rhs: this_rhs,
-                } => {
+                Constraint::Standard { name: _, coefficients, sense: _, rhs: this_rhs } => {
                     rhs.push(*this_rhs);
                     for coeff in coefficients {
                         if let Some(row) = index.get(&coeff.var_name) {
