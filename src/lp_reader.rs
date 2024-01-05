@@ -9,6 +9,7 @@ use lp_parser_rs::model::variable::VariableType;
 use lp_parser_rs::parse::parse_lp_file;
 use std::collections::HashMap;
 use std::fs;
+use std::ops::RangeBounds;
 use std::path::Path;
 
 impl Balas<f64> {
@@ -87,8 +88,9 @@ impl Balas<f64> {
 ///
 fn normalize_for_balas(lp: &LPProblem) -> Result<LPProblem, LpErrors> {
     let problem_name = format!("{}_balas", lp.problem_name);
-    let objectives = create_min_objectives(lp);
+    let objective = create_min_objective(lp)?;
     let constraints = create_ge_constraints(lp)?;
+    fix_neg_variables(&mut objective, &mut constraints);
 
     // copy variables while making sure they all are binary
     let mut variables = HashMap::new();
@@ -103,9 +105,37 @@ fn normalize_for_balas(lp: &LPProblem) -> Result<LPProblem, LpErrors> {
         problem_name,
         problem_sense: Sense::Minimize,
         variables,
-        objectives,
+        objectives: vec![objective],
         constraints,
     })
+}
+
+fn fix_neg_variables(objective: &mut Objective, constraints: &mut HashMap<String, Constraint>) {
+    let mut to_change = Vec::<&str>::new();
+    for coeff_var in &mut objective.coefficients {
+        if coeff_var.coefficient < 0.0 {
+            coeff_var.coefficient = -coeff_var.coefficient;
+            to_change.push(&coeff_var.var_name);
+        }
+    }
+    for (label, ref constraint) in constraints {
+        for &var in &to_change {
+            if let Constraint::Standard {
+                name: _,
+                mut coefficients,
+                sense: _,
+                mut rhs,
+            } = constraint
+            {
+                for coeff in &mut coefficients {
+                    if coeff.var_name == var {
+                        rhs -= coeff.coefficient;
+                        coeff.coefficient = -coeff.coefficient;
+                    }
+                }
+            }
+        }
+    }
 }
 fn create_ge_constraints(lp: &LPProblem) -> Result<HashMap<String, Constraint>, LpErrors> {
     // make all constraints be of the >= sense
@@ -182,30 +212,29 @@ fn create_ge_constraints(lp: &LPProblem) -> Result<HashMap<String, Constraint>, 
     Ok(constraints)
 }
 
-fn create_min_objectives(lp: &LPProblem) -> Vec<Objective> {
+fn create_min_objective(lp: &LPProblem) -> Result<Objective, LpErrors> {
     let negate = lp.problem_sense == Sense::Maximize;
-    lp.objectives
-        .iter()
-        .map(|objective| {
-            let outer: Vec<Coefficient> = objective
-                .coefficients
-                .iter()
-                .map(|c| {
-                    let coeff = if negate {
-                        -c.coefficient
-                    } else {
-                        c.coefficient
-                    };
-                    Coefficient {
-                        var_name: c.var_name.clone(),
-                        coefficient: coeff,
-                    }
-                })
-                .collect();
-            Objective {
-                name: objective.name.clone(),
-                coefficients: outer,
-            }
+    if let Some(objective) = lp.objectives.first() {
+        let outer: Vec<Coefficient> = objective
+            .coefficients
+            .iter()
+            .map(|c| {
+                let coeff = if negate {
+                    -c.coefficient
+                } else {
+                    c.coefficient
+                };
+                Coefficient {
+                    var_name: c.var_name.clone(),
+                    coefficient: coeff,
+                }
+            })
+            .collect();
+        Ok(Objective {
+            name: objective.name.clone(),
+            coefficients: outer,
         })
-        .collect()
+    } else {
+        Err(LpErrors::NoObjective)
+    }
 }
