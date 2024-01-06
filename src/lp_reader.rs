@@ -141,13 +141,7 @@ fn fix_neg_variables(objective: &Objective, constraints: &Constraints) -> (Objec
         } = constraint
         {
             let mut rhs = *rhs;
-            let mut coefficients: Vec<Coefficient> = coefficients
-                .iter()
-                .map(|c| Coefficient {
-                    var_name: c.var_name.clone(),
-                    coefficient: c.coefficient,
-                })
-                .collect();
+            let mut coefficients = coefficients.to_vec();
 
             for &var_name in &to_change {
                 coefficients.iter_mut().for_each(|c| {
@@ -184,13 +178,7 @@ fn create_ge_constraints(lp: &LPProblem) -> Result<Constraints, LpErrors> {
                     rhs,
                 } => {
                     let mut my_sense = sense.to_owned();
-                    let mut my_coefficients: Vec<Coefficient> = coefficients
-                        .iter()
-                        .map(|c| Coefficient {
-                            var_name: c.var_name.clone(),
-                            coefficient: c.coefficient,
-                        })
-                        .collect();
+                    let mut my_coefficients = coefficients.to_vec();
                     let mut my_rhs = *rhs;
                     match sense.as_str() {
                         "<=" => {
