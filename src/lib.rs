@@ -3,19 +3,23 @@ mod lp_reader;
 
 use bit_vec::BitVec;
 use num::Bounded;
+use serde::Serialize;
 use std::{fmt::Display, ops::Neg};
 
 type Array<T> = Vec<Vec<T>>;
 
+#[derive(Serialize)]
 pub struct Balas<T> {
     coefficients: Vec<T>,
     constraints: Array<T>,
     rhs: Vec<T>,
     cumulative: Array<T>,
     best: T,
+    #[serde(skip_serializing)]
     solution: BitVec,
     count: usize,
     vars: Vec<String>,
+    recording: Vec<Record>,
 }
 
 impl<T> Balas<T>
@@ -41,6 +45,7 @@ where
             solution: BitVec::new(),
             count: 0,
             vars: vars.to_owned(),
+            recording: vec![],
         }
     }
     pub fn reset(&mut self) {
@@ -55,11 +60,20 @@ where
         // later on.
         let accumulator: Vec<T> = self.rhs.clone().into_iter().map(|a| -a).collect();
         let vars = BitVec::from_elem(self.coefficients.len(), false);
-        self.node(1, 0, &accumulator, &T::zero(), &vars);
-        self.node(0, 0, &accumulator, &T::zero(), &vars);
+        self.node(0, 0, &accumulator, &T::zero(), &vars, "0".to_string());
+        self.node(1, 0, &accumulator, &T::zero(), &vars, "1".to_string());
     }
 
-    fn node(&mut self, branch: u8, index: usize, accumulator: &[T], objective: &T, vars: &BitVec) {
+    fn node(
+        &mut self,
+        branch: u8,
+        index: usize,
+        accumulator: &[T],
+        objective: &T,
+        vars: &BitVec,
+        label: String,
+    ) {
+        self.record(&label, NodeState::Active);
         let mut objective = *objective;
         let mut vars = vars.to_owned();
         let mut accumulator = accumulator.to_owned();
@@ -80,7 +94,7 @@ where
             // If we're already not better than the current best objective, then
             // we can prune this entire branch.
             if objective >= self.best {
-                // println!("fathomed");
+                self.record(&label, NodeState::Suboptimal);
                 return;
             }
 
@@ -92,12 +106,15 @@ where
                 // println!("New best objective: {} {:?}", objective, vars);
                 self.best = objective;
                 self.solution = vars;
+                self.record(&label, NodeState::Fathomed);
                 return;
             }
         }
+        self.record(&label, NodeState::Visited);
         // If there is a potentially feasible descendant, then spawn 0 and 1 child nodes
         let Some(ccons) = self.cumulative.get(index) else {
             // println!("run out of vars with index: {index}");
+            self.record(&label, NodeState::Infeasible);
             return;
         };
 
@@ -106,9 +123,30 @@ where
             .zip(ccons)
             .all(|(&a, &b)| a + b >= T::zero())
         {
-            self.node(1, index + 1, &accumulator, &objective, &vars);
-            self.node(0, index + 1, &accumulator, &objective, &vars);
+            self.node(
+                0,
+                index + 1,
+                &accumulator,
+                &objective,
+                &vars,
+                label.clone() + "0",
+            );
+            self.node(
+                1,
+                index + 1,
+                &accumulator,
+                &objective,
+                &vars,
+                label.clone() + "1",
+            );
         }
+    }
+
+    fn record(&mut self, label: &str, state: NodeState) {
+        self.recording.push(Record {
+            node: label.to_string(),
+            state,
+        });
     }
 
     pub fn report(&self) {
@@ -141,4 +179,20 @@ where
         cumulative.reverse();
         cumulative
     }
+}
+
+#[derive(Serialize)]
+pub enum NodeState {
+    Default,
+    Active,
+    Visited,
+    Fathomed,
+    Infeasible,
+    Suboptimal,
+}
+
+#[derive(Serialize)]
+pub struct Record {
+    node: String,
+    state: NodeState,
 }

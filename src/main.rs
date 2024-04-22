@@ -1,6 +1,8 @@
 use anyhow::Result;
 use argh::FromArgs;
 use balas::Balas;
+use std::fs::File;
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -13,6 +15,8 @@ struct Args {
     /// how many repetitions (for timing)
     #[argh(option, short = 'r', default = "1")]
     reps: usize,
+    #[argh(option, description = "optional recording file")]
+    outfile: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
@@ -31,6 +35,11 @@ fn main() -> Result<()> {
         args.reps
     );
     balas.report();
+    if let Some(outfile) = args.outfile {
+        let mut out = File::create(outfile)?;
+        let buf = serde_json::to_string(&balas)?;
+        out.write(buf.as_bytes())?;
+    }
 
     Ok(())
 }
