@@ -32,10 +32,6 @@ where
 {
     pub fn new(coeff: &[T], constraints: &Array<T>, b: &[T], vars: &Vec<String>) -> Balas<T> {
         let cumulative = Self::make_cumulative(constraints);
-        // dbg!(&coeff);
-        // dbg!(&constraints);
-        // dbg!(&b);
-        // dbg!(&vars);
         Balas {
             coefficients: coeff.to_vec(),
             constraints: constraints.clone(),
