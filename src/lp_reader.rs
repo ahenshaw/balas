@@ -4,8 +4,9 @@ use lp_parser_rs::model::coefficient::Coefficient;
 use lp_parser_rs::model::constraint::Constraint;
 use lp_parser_rs::model::lp_problem::LPProblem;
 use lp_parser_rs::model::objective::Objective;
-use lp_parser_rs::model::sense::Sense;
-use lp_parser_rs::model::variable::VariableType;
+use lp_parser_rs::model::sense::{Cmp, Sense};
+// use lp_parser_rs::model::variable::VariableType;
+use lp_parser_rs::model::variable::Variable;
 use lp_parser_rs::parse::parse_lp_file;
 use std::collections::HashMap;
 use std::fs;
@@ -96,10 +97,10 @@ fn normalize_for_balas(lp: &LPProblem) -> Result<LPProblem, LpErrors> {
     // copy variables while making sure they all are binary
     let mut variables = HashMap::new();
     for (s, vtype) in &lp.variables {
-        if *vtype != VariableType::Binary {
+        if *vtype != Variable::Binary {
             return Err(LpErrors::VarNotBinary);
         }
-        variables.insert(s.clone(), VariableType::Binary);
+        variables.insert(s.clone(), Variable::Binary);
     }
 
     Ok(LPProblem {
@@ -177,20 +178,20 @@ fn create_ge_constraints(lp: &LPProblem) -> Result<Constraints, LpErrors> {
                     sense,
                     rhs,
                 } => {
-                    let mut my_sense = sense.to_owned();
+                    let mut my_sense = sense.clone();
                     let mut my_coefficients = coefficients.to_vec();
                     let mut my_rhs = *rhs;
-                    match sense.as_str() {
-                        "<=" => {
-                            my_sense = ">=".to_owned();
+                    match sense {
+                        Cmp::LessOrEqual => {
+                            my_sense = Cmp::GreaterOrEqual;
                             my_rhs = -rhs;
                             my_coefficients
                                 .iter_mut()
                                 .for_each(|c| c.coefficient = -c.coefficient);
                         }
-                        "=" => {
+                        Cmp::Equal => {
                             // change over "=" to ">="
-                            my_sense = ">=".to_owned();
+                            my_sense = Cmp::GreaterOrEqual;
 
                             // create negated copy of constraint
                             let new_coeff: Vec<Coefficient> = my_coefficients
@@ -205,7 +206,7 @@ fn create_ge_constraints(lp: &LPProblem) -> Result<Constraints, LpErrors> {
                                 Constraint::Standard {
                                     name: format!("{}_balas", name),
                                     coefficients: new_coeff,
-                                    sense: ">=".to_owned(),
+                                    sense: Cmp::GreaterOrEqual,
                                     rhs: -rhs,
                                 },
                             ));

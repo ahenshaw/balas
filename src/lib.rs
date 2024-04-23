@@ -3,23 +3,23 @@ mod lp_reader;
 
 use bit_vec::BitVec;
 use num::Bounded;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use std::{fmt::Display, ops::Neg};
 
 type Array<T> = Vec<Vec<T>>;
 
-#[derive(Serialize)]
+#[derive(Deserialize,Serialize)]
 pub struct Balas<T> {
-    coefficients: Vec<T>,
-    constraints: Array<T>,
-    rhs: Vec<T>,
+    pub coefficients: Vec<T>,
+    pub constraints: Array<T>,
+    pub rhs: Vec<T>,
     cumulative: Array<T>,
-    best: T,
-    #[serde(skip_serializing)]
-    solution: BitVec,
-    count: usize,
+    pub best: T,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub solution: BitVec,
+    pub count: usize,
     vars: Vec<String>,
-    recording: Vec<Record>,
+    pub recording: Vec<Record>,
 }
 
 impl<T> Balas<T>
@@ -181,7 +181,7 @@ where
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub enum NodeState {
     Default,
     Active,
@@ -191,7 +191,7 @@ pub enum NodeState {
     Suboptimal,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Record {
     node: String,
     state: NodeState,
