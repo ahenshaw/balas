@@ -3,12 +3,12 @@ mod lp_reader;
 
 use bit_vec::BitVec;
 use num::Bounded;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::{fmt::Display, ops::Neg};
 
 type Array<T> = Vec<Vec<T>>;
 
-#[derive(Deserialize,Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Balas<T> {
     pub coefficients: Vec<T>,
     pub constraints: Array<T>,
@@ -60,6 +60,9 @@ where
         // later on.
         let accumulator: Vec<T> = self.rhs.clone().into_iter().map(|a| -a).collect();
         let vars = BitVec::from_elem(self.coefficients.len(), false);
+        self.record("", NodeState::Active);
+        self.record("", NodeState::Visited);
+
         self.node(0, 0, &accumulator, &T::zero(), &vars, "0".to_string());
         self.node(1, 0, &accumulator, &T::zero(), &vars, "1".to_string());
     }
@@ -139,6 +142,8 @@ where
                 &vars,
                 label.clone() + "1",
             );
+        } else {
+            self.record(&label, NodeState::ImpossibleChildren);
         }
     }
 
@@ -181,7 +186,7 @@ where
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum NodeState {
     Default,
     Active,
@@ -189,10 +194,12 @@ pub enum NodeState {
     Fathomed,
     Infeasible,
     Suboptimal,
+    ImpossibleChildren,
+    Skipped,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Record {
-    node: String,
-    state: NodeState,
+    pub node: String,
+    pub state: NodeState,
 }
