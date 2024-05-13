@@ -65,13 +65,13 @@ where
 
         // self.node(0, 0, &accumulator, &T::zero(), &vars, "0".to_string());
         // self.node(1, 0, &accumulator, &T::zero(), &vars, "1".to_string());
-        self.node(0, 0, &accumulator, &T::zero(), &vars);
-        self.node(1, 0, &accumulator, &T::zero(), &vars);
+        self.node(false, 0, &accumulator, &T::zero(), &vars);
+        self.node(true, 0, &accumulator, &T::zero(), &vars);
     }
 
     fn node(
         &mut self,
-        branch: u8,
+        branch: bool,
         index: usize,
         accumulator_in: &[T],
         objective: &T,
@@ -86,7 +86,7 @@ where
 
         self.count += 1;
 
-        if branch == 1 {
+        if branch {
             // Update the current value of the objective
             objective += &self.coefficients[index];
 
@@ -122,6 +122,7 @@ where
             accumulator = accumulator_in.to_owned();
         }
         // self.record(&label, NodeState::Visited);
+
         // If there is a potentially feasible descendant, then spawn 0 and 1 child nodes
         let Some(ccons) = self.cumulative.get(index) else {
             // no more nodes to check in this branch
@@ -135,7 +136,7 @@ where
             .all(|(&a, &b)| a + b >= T::zero())
         {
             self.node(
-                0,
+                false,
                 index + 1,
                 &accumulator,
                 &objective,
@@ -143,7 +144,7 @@ where
                 // label.clone() + "0",
             );
             self.node(
-                1,
+                true,
                 index + 1,
                 &accumulator,
                 &objective,
