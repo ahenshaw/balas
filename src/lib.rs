@@ -4,7 +4,7 @@ mod lp_reader;
 use bit_vec::BitVec;
 use num::Bounded;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, io::Write, ops::Neg};
+use std::{fmt::Display, ops::Neg};
 
 type Array<T> = Vec<Vec<T>>;
 
@@ -73,7 +73,7 @@ where
         &mut self,
         branch: u8,
         index: usize,
-        accumulator: &[T],
+        accumulator_in: &[T],
         objective: &T,
         vars: &BitVec,
         // label: String,
@@ -81,18 +81,12 @@ where
         // self.record(&label, NodeState::Active);
         let mut objective = *objective;
         let mut vars = vars.to_owned();
-        let mut accumulator = accumulator.to_owned();
-        // Alias the current column of the cumulative constraints
-        // let ccons = &self.cumulative[index];
+        // let mut accumulator = accumulator.to_owned();
+        let accumulator: Vec<T>;
 
         self.count += 1;
-        // println!("count:{}  branch:{branch}  index:{index}  objective:{objective}  accumulator:{accumulator:?}", self.count);
 
         if branch == 1 {
-            vars.set(index, true);
-            // Alias the current column of the constraints
-            let cons = &self.constraints[index];
-
             // Update the current value of the objective
             objective += &self.coefficients[index];
 
@@ -103,24 +97,34 @@ where
                 return;
             }
 
-            // Check if constraints satisfied, while updating the accumulator.
+            vars.set(index, true);
+
+            // Alias the current column of the constraints
+            let cons = &self.constraints[index];
+
+            // Update the accumulator
+            accumulator = accumulator_in
+                .iter()
+                .zip(cons)
+                .map(|(a, b)| *a + *b)
+                .collect();
+
+            // Check if constraints are satisfied.
             // We do not have to check the 0 branch, as the accumulator is not changed there.
             // If all of constraints are satisfied, then we are fathomed and we can't do any better.
-            accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a += b);
             if accumulator.iter().all(|a| *a >= T::zero()) {
-                // println!("New best objective: {} {:?}", objective, vars);
                 self.best = objective;
-                print!("{objective} ");
-                std::io::stdout().flush().unwrap();
                 self.solution = vars;
                 // self.record(&label, NodeState::Fathomed);
                 return;
             }
+        } else {
+            accumulator = accumulator_in.to_owned();
         }
         // self.record(&label, NodeState::Visited);
         // If there is a potentially feasible descendant, then spawn 0 and 1 child nodes
         let Some(ccons) = self.cumulative.get(index) else {
-            // println!("run out of vars with index: {index}");
+            // no more nodes to check in this branch
             // self.record(&label, NodeState::Infeasible);
             return;
         };
