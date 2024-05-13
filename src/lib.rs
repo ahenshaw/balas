@@ -54,6 +54,60 @@ where
         self.solution = BitVec::new();
     }
 
+/*
+    pub fn solve_non_recursive(&mut self) {
+        // Initialize the constraint accumulator with the negation of the b vector (the
+        // right-hand side of the constraints).  This way, we can just compare against 0
+        // later on.
+        let num_vars = self.coefficients.len();
+        let accumulator: Vec<T> = self.rhs.iter().map(|&a| -a).collect();
+        let vars: Vec<u32> = vec![0;num_vars];
+        let mut branch: u32 = 0;
+        let mut index: usize = 0;
+        let mut objective = T::zero();
+
+        while index < num_vars || branch == 0 {
+            self.count += 1;
+            // println!("count:{}  branch:{branch}  index:{index}  objective:{objective}  accumulator:{accumulator:?}", self.count);
+
+            if branch == 1 {
+                vars[index] = 1;
+                // Alias the current column of the constraints
+                let cons = &self.constraints[index];
+
+                // Update the current value of the objective
+                objective += &self.coefficients[index];
+
+                // If we're already not better than the current best objective, then
+                // we can prune this entire branch.
+                if objective >= self.best {
+
+                    // undo what we've done
+                    while vars[index] == 1 {
+                        objective -= &self.coefficients[index];
+                        index -= 1;
+                    }
+
+                    // return;
+                }
+
+                // Check if constraints satisfied, while updating the accumulator.
+                // We do not have to check the 0 branch, as the accumulator is not changed there.
+                // If all of constraints are satisfied, then we are fathomed and we can't do any better.
+                accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a += b);
+                if accumulator.iter().all(|a| *a >= T::zero()) {
+                    self.best = objective;
+                    self.solution = vars;
+                    return;
+                }
+            }
+
+
+        }
+
+    }
+*/
+
     pub fn solve(&mut self) {
         // Initialize the constraint accumulator with the negation of the b vector (the
         // right-hand side of the constraints).  This way, we can just compare against 0
@@ -110,7 +164,7 @@ where
             if accumulator.iter().all(|a| *a >= T::zero()) {
                 // println!("New best objective: {} {:?}", objective, vars);
                 self.best = objective;
-                print!("{objective} ");
+                // print!("{objective} ");
                 std::io::stdout().flush().unwrap();
                 self.solution = vars;
                 // self.record(&label, NodeState::Fathomed);
