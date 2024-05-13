@@ -17,6 +17,8 @@ struct Args {
     reps: usize,
     #[argh(option, description = "optional recording file")]
     outfile: Option<PathBuf>,
+    #[argh(option, description = "use this heuristic pre-solve")]
+    heuristic: Option<f64>,
 }
 
 fn main() -> Result<()> {
@@ -27,6 +29,9 @@ fn main() -> Result<()> {
     let start = Instant::now();
     for _ in 0..args.reps {
         balas.reset();
+        if let Some(heuristic) = args.heuristic {
+            balas.best = heuristic.into();
+        }
         balas.solve();
     }
     println!(

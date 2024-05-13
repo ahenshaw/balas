@@ -4,7 +4,7 @@ mod lp_reader;
 use bit_vec::BitVec;
 use num::Bounded;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, ops::Neg};
+use std::{fmt::Display, io::Write, ops::Neg};
 
 type Array<T> = Vec<Vec<T>>;
 
@@ -58,13 +58,15 @@ where
         // Initialize the constraint accumulator with the negation of the b vector (the
         // right-hand side of the constraints).  This way, we can just compare against 0
         // later on.
-        let accumulator: Vec<T> = self.rhs.clone().into_iter().map(|a| -a).collect();
+        let accumulator: Vec<T> = self.rhs.iter().map(|&a| -a).collect();
         let vars = BitVec::from_elem(self.coefficients.len(), false);
         self.record("", NodeState::Active);
         self.record("", NodeState::Visited);
 
-        self.node(0, 0, &accumulator, &T::zero(), &vars, "0".to_string());
-        self.node(1, 0, &accumulator, &T::zero(), &vars, "1".to_string());
+        // self.node(0, 0, &accumulator, &T::zero(), &vars, "0".to_string());
+        // self.node(1, 0, &accumulator, &T::zero(), &vars, "1".to_string());
+        self.node(0, 0, &accumulator, &T::zero(), &vars);
+        self.node(1, 0, &accumulator, &T::zero(), &vars);
     }
 
     fn node(
@@ -74,9 +76,9 @@ where
         accumulator: &[T],
         objective: &T,
         vars: &BitVec,
-        label: String,
+        // label: String,
     ) {
-        self.record(&label, NodeState::Active);
+        // self.record(&label, NodeState::Active);
         let mut objective = *objective;
         let mut vars = vars.to_owned();
         let mut accumulator = accumulator.to_owned();
@@ -97,7 +99,7 @@ where
             // If we're already not better than the current best objective, then
             // we can prune this entire branch.
             if objective >= self.best {
-                self.record(&label, NodeState::Suboptimal);
+                // self.record(&label, NodeState::Suboptimal);
                 return;
             }
 
@@ -108,16 +110,18 @@ where
             if accumulator.iter().all(|a| *a >= T::zero()) {
                 // println!("New best objective: {} {:?}", objective, vars);
                 self.best = objective;
+                print!("{objective} ");
+                std::io::stdout().flush().unwrap();
                 self.solution = vars;
-                self.record(&label, NodeState::Fathomed);
+                // self.record(&label, NodeState::Fathomed);
                 return;
             }
         }
-        self.record(&label, NodeState::Visited);
+        // self.record(&label, NodeState::Visited);
         // If there is a potentially feasible descendant, then spawn 0 and 1 child nodes
         let Some(ccons) = self.cumulative.get(index) else {
             // println!("run out of vars with index: {index}");
-            self.record(&label, NodeState::Infeasible);
+            // self.record(&label, NodeState::Infeasible);
             return;
         };
 
@@ -132,7 +136,7 @@ where
                 &accumulator,
                 &objective,
                 &vars,
-                label.clone() + "0",
+                // label.clone() + "0",
             );
             self.node(
                 1,
@@ -140,10 +144,10 @@ where
                 &accumulator,
                 &objective,
                 &vars,
-                label.clone() + "1",
+                // label.clone() + "1",
             );
         } else {
-            self.record(&label, NodeState::ImpossibleChildren);
+            // self.record(&label, NodeState::ImpossibleChildren);
         }
     }
 
