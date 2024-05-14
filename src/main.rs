@@ -19,6 +19,9 @@ struct Args {
     outfile: Option<PathBuf>,
     #[argh(option, description = "use this heuristic pre-solve")]
     heuristic: Option<f64>,
+    #[argh(switch, short = 'u', description = "use the unwound, non-recursive code")]
+    unwound: bool,
+
 }
 
 fn main() -> Result<()> {
@@ -32,8 +35,11 @@ fn main() -> Result<()> {
         if let Some(heuristic) = args.heuristic {
             balas.best = heuristic.into();
         }
-        // balas.solve();
-        balas.solve_non_recursive();
+        if args.unwound {
+            balas.solve_non_recursive();
+        } else {
+            balas.solve();
+        }
     }
     println!(
         "Elapsed time: {:?} (repetitions: {})",
