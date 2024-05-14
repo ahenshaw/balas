@@ -1,7 +1,6 @@
 mod lp_errors;
 mod lp_reader;
 
-use bit_vec::BitVec;
 use num::Bounded;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, io::Write, ops::Neg};
@@ -16,7 +15,7 @@ pub struct Balas<T> {
     cumulative: Array<T>,
     pub best: T,
     #[serde(skip_serializing, skip_deserializing)]
-    pub solution: BitVec,
+    pub solution: Vec<u8>,
     pub count: usize,
     vars: Vec<String>,
     pub recording: Vec<Record>,
@@ -30,6 +29,7 @@ where
         + Display
         + num::Zero
         + for<'a> std::ops::AddAssign<&'a T>
+        + for<'a> std::ops::SubAssign<&'a T>
         + std::cmp::PartialOrd
         + std::fmt::Debug,
     Vec<T>: FromIterator<<T as Neg>::Output>,
@@ -42,7 +42,7 @@ where
             rhs: b.to_vec(),
             cumulative,
             best: T::max_value(),
-            solution: BitVec::new(),
+            solution: Vec::new(),
             count: 0,
             vars: vars.to_owned(),
             recording: vec![],
@@ -51,69 +51,82 @@ where
     pub fn reset(&mut self) {
         self.count = 0;
         self.best = T::max_value();
-        self.solution = BitVec::new();
+        self.solution = Vec::new();
     }
 
-/*
+
     pub fn solve_non_recursive(&mut self) {
+
+        let num_vars = self.coefficients.len();
+        let mut vars: Vec<u8> = vec![0;num_vars];
+        let mut branch = 0u8;
+        let mut index: usize = 0;
+        let mut objective = T::zero();
+        let mut state = Flow::Normal;
+
         // Initialize the constraint accumulator with the negation of the b vector (the
         // right-hand side of the constraints).  This way, we can just compare against 0
         // later on.
-        let num_vars = self.coefficients.len();
-        let accumulator: Vec<T> = self.rhs.iter().map(|&a| -a).collect();
-        let vars: Vec<u32> = vec![0;num_vars];
-        let mut branch: u32 = 0;
-        let mut index: usize = 0;
-        let mut objective = T::zero();
+        let mut accumulator: Vec<T> = self.rhs.iter().map(|&b| -b).collect();
 
         while index < num_vars || branch == 0 {
-            self.count += 1;
-            // println!("count:{}  branch:{branch}  index:{index}  objective:{objective}  accumulator:{accumulator:?}", self.count);
 
-            if branch == 1 {
-                vars[index] = 1;
-                // Alias the current column of the constraints
-                let cons = &self.constraints[index];
+            // Alias the current column of the constraints and grab the coefficients value
+            let cons = &self.constraints[index];
+            let coeff = &self.coefficients[index];
 
-                // Update the current value of the objective
-                objective += &self.coefficients[index];
-
-                // If we're already not better than the current best objective, then
-                // we can prune this entire branch.
-                if objective >= self.best {
-
-                    // undo what we've done
-                    while vars[index] == 1 {
-                        objective -= &self.coefficients[index];
+            match state {
+                Flow::Backtrack => {
+                    if vars[index] == 1 {
+                        // we have to reverse what we did before we leave
+                        accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a -= b);
+                        objective -= coeff;
                         index -= 1;
+                    } else {
+                        state = Flow::Normal;
+                        branch = 0;
                     }
+                },
+                Flow::Normal => {
+                    self.count += 1;
+                    vars[index] = branch;
 
-                    // return;
-                }
+                    if branch == 1 {
+                        // Update the accumulator.  This only needs to be done in the ones branch
+                        accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a += b);
 
-                // Check if constraints satisfied, while updating the accumulator.
-                // We do not have to check the 0 branch, as the accumulator is not changed there.
-                // If all of constraints are satisfied, then we are fathomed and we can't do any better.
-                accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a += b);
-                if accumulator.iter().all(|a| *a >= T::zero()) {
-                    self.best = objective;
-                    self.solution = vars;
-                    return;
+                        // Update the current value of the objective
+                        objective += coeff;
+
+                        // If we're already not better than the current best objective, then
+                        // we can prune this entire branch.
+                        if objective >= self.best {
+                            state = Flow::Backtrack;
+                        } else {
+                            // Check if constraints satisfied, while updating the accumulator.
+                            // We do not have to check the 0 branch, as the accumulator is not changed there.
+                            // If all of constraints are satisfied, then we are fathomed and we can't do any better.
+                            if accumulator.iter().all(|x| *x >= T::zero()) {
+                                self.best = objective;
+                                // self.solution = vars;
+                                state = Flow::Backtrack;
+                            }
+                        }
+                    }
                 }
             }
-
-
         }
-
     }
-*/
+
 
     pub fn solve(&mut self) {
         // Initialize the constraint accumulator with the negation of the b vector (the
         // right-hand side of the constraints).  This way, we can just compare against 0
         // later on.
         let accumulator: Vec<T> = self.rhs.iter().map(|&a| -a).collect();
-        let vars = BitVec::from_elem(self.coefficients.len(), false);
+        // let vars = BitVec::from_elem(self.coefficients.len(), false);
+        let num_vars = self.coefficients.len();
+        let vars = vec![0u8; num_vars];
         self.record("", NodeState::Active);
         self.record("", NodeState::Visited);
 
@@ -129,7 +142,7 @@ where
         index: usize,
         accumulator: &[T],
         objective: &T,
-        vars: &BitVec,
+        vars: &Vec<u8>,
         // label: String,
     ) {
         // self.record(&label, NodeState::Active);
@@ -143,7 +156,7 @@ where
         // println!("count:{}  branch:{branch}  index:{index}  objective:{objective}  accumulator:{accumulator:?}", self.count);
 
         if branch == 1 {
-            vars.set(index, true);
+            vars[index] = 1;
             // Alias the current column of the constraints
             let cons = &self.constraints[index];
 
@@ -217,7 +230,7 @@ where
             println!("Optimal value: {}", self.best);
             println!("Solution:");
             for (var, value) in self.vars.iter().zip(self.solution.iter()) {
-                println!("  {var}: {}", value as u8);
+                println!("  {var}: {}", value);
             }
         } else {
             println!("No solution");
@@ -242,6 +255,11 @@ where
         cumulative.reverse();
         cumulative
     }
+}
+
+enum Flow {
+    Backtrack,
+    Normal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
