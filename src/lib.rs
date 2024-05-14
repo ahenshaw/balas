@@ -54,11 +54,9 @@ where
         self.solution = Vec::new();
     }
 
-
     pub fn solve_non_recursive(&mut self) {
-
         let num_vars = self.coefficients.len();
-        let mut vars: Vec<u8> = vec![0;num_vars];
+        let mut vars: Vec<u8> = vec![0; num_vars];
         let mut branch = 0u8;
         let mut index: usize = 0;
         let mut objective = T::zero();
@@ -69,24 +67,30 @@ where
         // later on.
         let mut accumulator: Vec<T> = self.rhs.iter().map(|&b| -b).collect();
 
-        while index < num_vars || branch == 0 {
-
+        loop {
+            // std::thread::sleep(std::time::Duration::from_secs_f32(0.5));
+            // println!("Nun vars: {num_vars}, index: {index}, branch: {branch}, state: {state:?}");
             // Alias the current column of the constraints and grab the coefficients value
             let cons = &self.constraints[index];
             let coeff = &self.coefficients[index];
 
             match state {
+                Flow::Terminate => break,
                 Flow::Backtrack => {
                     if vars[index] == 1 {
-                        // we have to reverse what we did before we leave
-                        accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a -= b);
-                        objective -= coeff;
-                        index -= 1;
+                        if index == 0 {
+                            state = Flow::Terminate;
+                        } else {
+                            // we have to reverse what we did before we leave
+                            accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a -= b);
+                            objective -= coeff;
+                            index -= 1;
+                        }
                     } else {
                         state = Flow::Normal;
-                        branch = 0;
+                        branch = 1;
                     }
-                },
+                }
                 Flow::Normal => {
                     self.count += 1;
                     vars[index] = branch;
@@ -108,16 +112,33 @@ where
                             // If all of constraints are satisfied, then we are fathomed and we can't do any better.
                             if accumulator.iter().all(|x| *x >= T::zero()) {
                                 self.best = objective;
-                                // self.solution = vars;
+                                // println!("{objective} {:?}", &vars[..=index]);
+                                // self.solution = vars.clone();
                                 state = Flow::Backtrack;
                             }
                         }
+                    }
+
+                    // This is the same behavior for either a 0 or 1 branch
+                    // If there is a potentially feasible descendant, then keep descending the tree
+                    if let Some(ccons) = self.cumulative.get(index) {
+                        if accumulator
+                            .iter()
+                            .zip(ccons)
+                            .all(|(&a, &b)| a + b >= T::zero())
+                        {
+                            index += 1;
+                            branch = 0;
+                        } else {
+                            state = Flow::Backtrack;
+                        }
+                    } else {
+                        state = Flow::Backtrack;
                     }
                 }
             }
         }
     }
-
 
     pub fn solve(&mut self) {
         // Initialize the constraint accumulator with the negation of the b vector (the
@@ -257,7 +278,9 @@ where
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
 enum Flow {
+    Terminate,
     Backtrack,
     Normal,
 }

@@ -32,7 +32,8 @@ fn main() -> Result<()> {
         if let Some(heuristic) = args.heuristic {
             balas.best = heuristic.into();
         }
-        balas.solve();
+        // balas.solve();
+        balas.solve_non_recursive();
     }
     println!(
         "Elapsed time: {:?} (repetitions: {})",
