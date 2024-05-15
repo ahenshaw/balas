@@ -12,15 +12,22 @@ struct Args {
     /// input file in LP format
     #[argh(positional)]
     infile: PathBuf,
+
     /// how many repetitions (for timing)
     #[argh(option, short = 'r', default = "1")]
     reps: usize,
-    #[argh(option, description = "optional recording file")]
+
+    /// optional recording file
+    #[argh(option)]
     outfile: Option<PathBuf>,
-    #[argh(option, description = "use this heuristic pre-solve")]
+
+    /// use this heuristic pre-solve
+    #[argh(option)]
     heuristic: Option<f64>,
-    #[argh(switch, short = 'u', description = "use the unwound, non-recursive code")]
-    unwound: bool,
+
+    ///use the original recursive code
+    #[argh(switch)]
+    recursive: bool,
 
 }
 
@@ -35,8 +42,8 @@ fn main() -> Result<()> {
         if let Some(heuristic) = args.heuristic {
             balas.best = heuristic.into();
         }
-        if args.unwound {
-            balas.solve_non_recursive();
+        if args.recursive {
+            balas.solve_recursively();
         } else {
             balas.solve();
         }
