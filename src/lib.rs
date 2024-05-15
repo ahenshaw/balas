@@ -106,6 +106,7 @@ where
                         // we can prune this entire branch.
                         if objective >= self.best {
                             state = Flow::Backtrack;
+                            continue;
                         } else {
                             // Check if constraints satisfied, while updating the accumulator.
                             // We do not have to check the 0 branch, as the accumulator is not changed there.
@@ -115,6 +116,7 @@ where
                                 // println!("{objective} {:?}", &vars[..=index]);
                                 // self.solution = vars.clone();
                                 state = Flow::Backtrack;
+                                continue;
                             }
                         }
                     }
