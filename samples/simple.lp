@@ -1,11 +1,9 @@
 \ LP format example
 
-Minimize
-x + 10 y
+Maximize
+5 x + 3 y + 7 z
 Subject To
-r01: x + y  >= 1
-
+4 x + 2 y + 5 z <= 8
 Binaries
-
- x y
+ x y z
 End

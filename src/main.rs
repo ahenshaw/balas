@@ -1,6 +1,8 @@
 use anyhow::Result;
 use argh::FromArgs;
 use balas::Balas;
+use std::fs::File;
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -10,9 +12,23 @@ struct Args {
     /// input file in LP format
     #[argh(positional)]
     infile: PathBuf,
+
     /// how many repetitions (for timing)
     #[argh(option, short = 'r', default = "1")]
     reps: usize,
+
+    /// optional recording file
+    #[argh(option)]
+    outfile: Option<PathBuf>,
+
+    /// use this heuristic pre-solve
+    #[argh(option)]
+    heuristic: Option<f64>,
+
+    ///use the original recursive code
+    #[argh(switch)]
+    recursive: bool,
+
 }
 
 fn main() -> Result<()> {
@@ -23,7 +39,14 @@ fn main() -> Result<()> {
     let start = Instant::now();
     for _ in 0..args.reps {
         balas.reset();
-        balas.solve();
+        if let Some(heuristic) = args.heuristic {
+            balas.best = heuristic.into();
+        }
+        if args.recursive {
+            balas.solve_recursively();
+        } else {
+            balas.solve();
+        }
     }
     println!(
         "Elapsed time: {:?} (repetitions: {})",
@@ -31,6 +54,11 @@ fn main() -> Result<()> {
         args.reps
     );
     balas.report();
+    if let Some(outfile) = args.outfile {
+        let mut out = File::create(outfile)?;
+        let buf = serde_json::to_string(&balas)?;
+        out.write(buf.as_bytes())?;
+    }
 
     Ok(())
 }
