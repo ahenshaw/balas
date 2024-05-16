@@ -4,6 +4,7 @@ mod recursive_solver;
 
 use num::Bounded;
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, RwLock};
 use std::{fmt::Display, ops::Neg};
 
 type Array<T> = Vec<Vec<T>>;
@@ -67,7 +68,9 @@ where
 
     /// single-threaded solver
     pub fn solve(&mut self) {
-        let (best, count, solution) = Self::tree(0, 0, &self.fixed);
+        let global_best = Arc::new(RwLock::new(T::max_value()));
+
+        let (best, count, solution) = Self::solve_subtree(0, 0, global_best, &self.fixed);
         self.best = best;
         self.count = count;
         self.solution = solution;
@@ -80,8 +83,11 @@ where
     {
         let fixed1 = self.fixed.clone();
         let fixed2 = self.fixed.clone();
-        let h1 = std::thread::spawn(move || Self::tree(1, 0, &fixed1));
-        let h2 = std::thread::spawn(move || Self::tree(1, 1, &fixed2));
+        let global_best = Arc::new(RwLock::new(T::max_value()));
+        let gb1 = Arc::clone(&global_best);
+        let gb2 = Arc::clone(&global_best);
+        let h1 = std::thread::spawn(move || Self::solve_subtree(1, 0, gb1, &fixed1));
+        let h2 = std::thread::spawn(move || Self::solve_subtree(1, 1, gb2, &fixed2));
         let (b1, c1, s1) = h1.join().unwrap();
         let (b2, c2, s2) = h2.join().unwrap();
 
@@ -120,12 +126,17 @@ where
         (accumulator, objective)
     }
 
-    fn tree(start_var_index: usize, tree_index: usize, fixed: &Fixed<T>) -> (T, usize, Vec<u8>) {
+    fn solve_subtree(
+        start_var_index: usize,
+        tree_index: usize,
+        global_best: Arc<RwLock<T>>,
+        fixed: &Fixed<T>,
+    ) -> (T, usize, Vec<u8>) {
         let mut vars: Vec<u8> = vec![0; fixed.num_vars];
         let mut var_index = start_var_index;
         let mut state = Flow::Normal;
         let mut count = 0usize;
-        let mut best = T::max_value();
+        let mut best: T = *global_best.read().unwrap();
         let mut solution = Vec::<u8>::new();
 
         let (mut accumulator, mut objective) =
@@ -176,7 +187,16 @@ where
 
                         // If we're already not better than the current best objective, then
                         // we can prune this entire branch.
-                        if objective >= best {
+                        if (objective >= best)
+                            && (objective
+                                >= match global_best.try_read() {
+                                    Ok(gl) => {
+                                        best = *gl;
+                                        best
+                                    }
+                                    _ => best,
+                                })
+                        {
                             state = Flow::Backtrack;
                             continue;
                         } else {
@@ -185,6 +205,10 @@ where
                             // If all of constraints are satisfied, then we are fathomed and we can't do any better.
                             if accumulator.iter().all(|x| *x >= T::zero()) {
                                 best = objective;
+                                if let Ok(mut gl) = global_best.try_write() {
+                                    *gl = best;
+                                }
+
                                 // println!("{objective} {:?}", &vars[..=index]);
                                 solution = vars.clone();
                                 state = Flow::Backtrack;
