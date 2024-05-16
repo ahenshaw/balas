@@ -15,7 +15,7 @@ pub struct Balas<T> {
     pub count: usize,
     vars: Vec<String>,
     pub recording: Vec<Record>,
-    pub fixed: Fixed<T>,
+    fixed: Fixed<T>,
 }
 
 /// The unchanging, fixed variables representing the BIP
@@ -27,7 +27,6 @@ struct Fixed<T> {
     rhs: Vec<T>,
     cumulative: Array<T>,
 }
-
 
 impl<T> Balas<T>
 where
@@ -44,7 +43,7 @@ where
 {
     pub fn new(coeff: &[T], constraints: &Array<T>, b: &[T], vars: &Vec<String>) -> Balas<T> {
         let cumulative = Self::make_cumulative(constraints);
-        let fixed = Fixed{
+        let fixed = Fixed {
             num_vars: coeff.len(),
             coefficients: coeff.to_vec(),
             constraints: constraints.clone(),
@@ -66,43 +65,84 @@ where
         self.solution = Vec::new();
     }
 
+    /// single-threaded solver
     pub fn solve(&mut self) {
-
+        let (best, count, solution) = Self::tree(0, 0, &self.fixed);
+        self.best = best;
+        self.count = count;
+        self.solution = solution;
     }
 
-    fn tree(start: usize, fixed: &Fixed<T>) -> (T, usize, Vec<u8>) {
+    /// multi-threaded solver
+    pub fn solve_mt(&mut self, _num_threads: usize) {
+        // let h1 = std::thread::spawn(|| Self::tree(1, 0, &self.fixed));
+        // let h2 = std::thread::spawn(|| Self::tree(1, 1, &self.fixed));
+        // let (b1, c1, s1) = h1.join().unwrap();
+        // let (b2, c2, s2) = h1.join().unwrap();
 
-        let mut vars: Vec<u8> = vec![0; fixed.num_vars];
-        let mut branch = 0u8;
-        let mut index = start;
+        // self.count = c1 + c2;
+        // self.best = if b1 <= b2 { b1 } else { b2 };
+    }
+
+    fn init_subtree(start_var_index: usize, tree_index: usize, fixed: &Fixed<T>) -> (Vec<T>, T) {
+        // Initialize the constraint accumulator with the negation of the b vector (the
+        // right-hand side of the constraints).  This way, we can just compare against 0
+        // later on.
+        let mut accumulator: Vec<T> = fixed.rhs.iter().map(|&b| -b).collect();
         let mut objective = T::zero();
+
+        // to init a subtree, we need to calculate the state for all of the ancestor nodes (if any)
+        for var_index in 0..start_var_index {
+            let branch = tree_index >> (start_var_index - var_index - 1) & 1;
+            let constraints = &fixed.constraints[var_index];
+            let coefficient = fixed.coefficients[var_index];
+
+            accumulator
+                .iter_mut()
+                .zip(constraints)
+                .for_each(|(a, b)| *a += &b);
+            if branch == 1 {
+                objective += &coefficient;
+            }
+        }
+
+        (accumulator, objective)
+    }
+
+    fn tree(start_var_index: usize, tree_index: usize, fixed: &Fixed<T>) -> (T, usize, Vec<u8>) {
+        let mut vars: Vec<u8> = vec![0; fixed.num_vars];
+        let mut var_index = start_var_index;
         let mut state = Flow::Normal;
         let mut count = 0usize;
         let mut best = T::max_value();
         let mut solution = Vec::<u8>::new();
 
-        // Initialize the constraint accumulator with the negation of the b vector (the
-        // right-hand side of the constraints).  This way, we can just compare against 0
-        // later on.
-        let mut accumulator: Vec<T> = fixed.rhs.iter().map(|&b| -b).collect();
+        let (mut accumulator, mut objective) =
+            Self::init_subtree(start_var_index, tree_index, &fixed);
+
+        // starting branch should be LSB of tree_index
+        let mut branch = (tree_index & 1) as u8;
 
         loop {
             // Alias the current column of the constraints and grab the coefficients value
-            let cons = &fixed.constraints[index];
-            let coeff = fixed.coefficients[index];
+            let constraints = &fixed.constraints[var_index];
+            let coefficient = fixed.coefficients[var_index];
 
             match state {
                 Flow::Terminate => break,
                 Flow::Backtrack => {
-                    if vars[index] == 1 {
-                        if index == 0 {
+                    if vars[var_index] == 1 {
+                        if var_index == start_var_index {
                             state = Flow::Terminate;
                         } else {
                             // we have to reverse what we did before we leave
-                            accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a -= &b);
-                            objective -= &coeff;
-                            vars[index] = 0;
-                            index -= 1;
+                            accumulator
+                                .iter_mut()
+                                .zip(constraints)
+                                .for_each(|(a, b)| *a -= &b);
+                            objective -= &coefficient;
+                            vars[var_index] = 0;
+                            var_index -= 1;
                         }
                     } else {
                         state = Flow::Normal;
@@ -113,12 +153,15 @@ where
                     count += 1;
 
                     if branch == 1 {
-                        vars[index] = branch;
+                        vars[var_index] = branch;
                         // Update the accumulator.  This only needs to be done in the ones branch
-                        accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a += &b);
+                        accumulator
+                            .iter_mut()
+                            .zip(constraints)
+                            .for_each(|(a, b)| *a += &b);
 
                         // Update the current value of the objective
-                        objective += &coeff;
+                        objective += &coefficient;
 
                         // If we're already not better than the current best objective, then
                         // we can prune this entire branch.
@@ -141,13 +184,13 @@ where
 
                     // This is the same behavior for either a 0 or 1 branch
                     // If there is a potentially feasible descendant, then keep descending the tree
-                    if let Some(ccons) = fixed.cumulative.get(index) {
+                    if let Some(ccons) = fixed.cumulative.get(var_index) {
                         if accumulator
                             .iter()
                             .zip(ccons)
                             .all(|(&a, &b)| a + b >= T::zero())
                         {
-                            index += 1;
+                            var_index += 1;
                             branch = 0;
                         } else {
                             state = Flow::Backtrack;
@@ -158,7 +201,7 @@ where
                 }
             }
         }
-        (objective, count, solution)
+        (best, count, solution)
     }
 
     fn record(&mut self, label: &str, state: NodeState) {
@@ -199,8 +242,6 @@ where
         cumulative
     }
 }
-
-
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 enum Flow {

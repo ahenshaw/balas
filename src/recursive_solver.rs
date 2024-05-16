@@ -3,7 +3,6 @@ use crate::NodeState;
 use num::Bounded;
 use std::{fmt::Display, io::Write, ops::Neg};
 
-
 impl<T> Balas<T>
 where
     T: Bounded
@@ -21,9 +20,9 @@ where
         // Initialize the constraint accumulator with the negation of the b vector (the
         // right-hand side of the constraints).  This way, we can just compare against 0
         // later on.
-        let accumulator: Vec<T> = self.rhs.iter().map(|&a| -a).collect();
+        let accumulator: Vec<T> = self.fixed.rhs.iter().map(|&a| -a).collect();
         // let vars = BitVec::from_elem(self.coefficients.len(), false);
-        let num_vars = self.coefficients.len();
+        let num_vars = self.fixed.coefficients.len();
         let vars = vec![0u8; num_vars];
         self.record("", NodeState::Active);
         self.record("", NodeState::Visited);
@@ -56,10 +55,10 @@ where
         if branch == 1 {
             vars[index] = 1;
             // Alias the current column of the constraints
-            let cons = &self.constraints[index];
+            let cons = &self.fixed.constraints[index];
 
             // Update the current value of the objective
-            objective += &self.coefficients[index];
+            objective += &self.fixed.coefficients[index];
 
             // If we're already not better than the current best objective, then
             // we can prune this entire branch.
@@ -84,7 +83,7 @@ where
         }
         // self.record(&label, NodeState::Visited);
         // If there is a potentially feasible descendant, then spawn 0 and 1 child nodes
-        let Some(ccons) = self.cumulative.get(index) else {
+        let Some(ccons) = self.fixed.cumulative.get(index) else {
             // println!("run out of vars with index: {index}");
             // self.record(&label, NodeState::Infeasible);
             return;
