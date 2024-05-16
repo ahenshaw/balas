@@ -87,12 +87,12 @@ where
         let global_best = Arc::new(RwLock::new(T::max_value()));
         let gb1 = Arc::clone(&global_best);
         let gb2 = Arc::clone(&global_best);
-        // let h1 = std::thread::spawn(move || Self::solve_subtree(1, 0, gb1, &fixed1));
-        // let h2 = std::thread::spawn(move || Self::solve_subtree(1, 1, gb2, &fixed2));
-        // let (b1, c1, s1) = h1.join().unwrap();
-        // let (b2, c2, s2) = h2.join().unwrap();
-        let (b1, c1, s1) = Self::solve_subtree(1, 0, gb1, &fixed1);
-        let (b2, c2, s2) = Self::solve_subtree(1, 1, gb2, &fixed2);
+        let h1 = std::thread::spawn(move || Self::solve_subtree(1, 0, gb1, &fixed1));
+        let h2 = std::thread::spawn(move || Self::solve_subtree(1, 1, gb2, &fixed2));
+        let (b1, c1, s1) = h1.join().unwrap();
+        let (b2, c2, s2) = h2.join().unwrap();
+        // let (b1, c1, s1) = Self::solve_subtree(1, 0, gb1, &fixed1);
+        // let (b2, c2, s2) = Self::solve_subtree(1, 1, gb2, &fixed2);
 
         self.count = c1 + c2;
         if b1 <= b2 {
@@ -145,8 +145,7 @@ where
         let (mut accumulator, mut objective) =
             Self::init_subtree(start_var_index, tree_index, &fixed);
 
-        // starting branch should be LSB of tree_index
-        let mut branch = (tree_index & 1) as u8;
+        let mut branch = 0u8;
 
         loop {
             // Alias the current column of the constraints and grab the coefficients value
