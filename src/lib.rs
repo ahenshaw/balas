@@ -19,7 +19,7 @@ pub struct Balas<T> {
 }
 
 /// The unchanging, fixed variables representing the BIP
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 struct Fixed<T> {
     num_vars: usize,
     coefficients: Vec<T>,
@@ -74,14 +74,25 @@ where
     }
 
     /// multi-threaded solver
-    pub fn solve_mt(&mut self, _num_threads: usize) {
-        // let h1 = std::thread::spawn(|| Self::tree(1, 0, &self.fixed));
-        // let h2 = std::thread::spawn(|| Self::tree(1, 1, &self.fixed));
-        // let (b1, c1, s1) = h1.join().unwrap();
-        // let (b2, c2, s2) = h1.join().unwrap();
+    pub fn solve_mt(&mut self, _num_threads: usize)
+    where
+        T: std::marker::Send + std::marker::Sync + 'static,
+    {
+        let fixed1 = self.fixed.clone();
+        let fixed2 = self.fixed.clone();
+        let h1 = std::thread::spawn(move || Self::tree(1, 0, &fixed1));
+        let h2 = std::thread::spawn(move || Self::tree(1, 1, &fixed2));
+        let (b1, c1, s1) = h1.join().unwrap();
+        let (b2, c2, s2) = h2.join().unwrap();
 
-        // self.count = c1 + c2;
-        // self.best = if b1 <= b2 { b1 } else { b2 };
+        self.count = c1 + c2;
+        if b1 <= b2 {
+            self.best = b1;
+            self.solution = s1;
+        } else {
+            self.best = b2;
+            self.solution = s2;
+        };
     }
 
     fn init_subtree(start_var_index: usize, tree_index: usize, fixed: &Fixed<T>) -> (Vec<T>, T) {
@@ -97,12 +108,12 @@ where
             let constraints = &fixed.constraints[var_index];
             let coefficient = fixed.coefficients[var_index];
 
-            accumulator
-                .iter_mut()
-                .zip(constraints)
-                .for_each(|(a, b)| *a += &b);
             if branch == 1 {
                 objective += &coefficient;
+                accumulator
+                    .iter_mut()
+                    .zip(constraints)
+                    .for_each(|(a, b)| *a += &b);
             }
         }
 

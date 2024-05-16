@@ -25,10 +25,12 @@ struct Args {
     #[argh(option)]
     heuristic: Option<f64>,
 
-    ///use the original recursive code
+    /// use the original recursive code
     #[argh(switch)]
     recursive: bool,
-
+    /// single-threaded mode
+    #[argh(switch, short = 's')]
+    single: bool,
 }
 
 fn main() -> Result<()> {
@@ -45,7 +47,11 @@ fn main() -> Result<()> {
         if args.recursive {
             balas.solve_recursively();
         } else {
-            balas.solve();
+            if args.single {
+                balas.solve()
+            } else {
+                balas.solve_mt(2);
+            }
         }
     }
     println!(
