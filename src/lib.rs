@@ -15,7 +15,6 @@ pub struct Balas<T> {
     pub rhs: Vec<T>,
     cumulative: Array<T>,
     pub best: T,
-    #[serde(skip_serializing, skip_deserializing)]
     pub solution: Vec<u8>,
     pub count: usize,
     vars: Vec<String>,
@@ -56,24 +55,33 @@ where
     }
 
     pub fn solve(&mut self) {
-        let num_vars = self.coefficients.len();
+
+    }
+
+    fn tree(num_vars: usize, start: usize,
+        coefficients: &Vec<T>, constraints: &Array<T>,
+        rhs: &Vec<T>, cumulative: &Array<T>) -> (T, usize, Vec<u8>) {
+
         let mut vars: Vec<u8> = vec![0; num_vars];
         let mut branch = 0u8;
-        let mut index: usize = 0;
+        let mut index = start;
         let mut objective = T::zero();
         let mut state = Flow::Normal;
+        let mut count = 0usize;
+        let mut best = T::max_value();
+        let mut solution = Vec::<u8>::new();
 
         // Initialize the constraint accumulator with the negation of the b vector (the
         // right-hand side of the constraints).  This way, we can just compare against 0
         // later on.
-        let mut accumulator: Vec<T> = self.rhs.iter().map(|&b| -b).collect();
+        let mut accumulator: Vec<T> = rhs.iter().map(|&b| -b).collect();
 
         loop {
             // std::thread::sleep(std::time::Duration::from_secs_f32(0.5));
             // println!("Nun vars: {num_vars}, index: {index}, branch: {branch}, state: {state:?}");
             // Alias the current column of the constraints and grab the coefficients value
-            let cons = &self.constraints[index];
-            let coeff = &self.coefficients[index];
+            let cons = &constraints[index];
+            let coeff = coefficients[index];
 
             match state {
                 Flow::Terminate => break,
@@ -83,8 +91,8 @@ where
                             state = Flow::Terminate;
                         } else {
                             // we have to reverse what we did before we leave
-                            accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a -= b);
-                            objective -= coeff;
+                            accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a -= &b);
+                            objective -= &coeff;
                             vars[index] = 0;
                             index -= 1;
                         }
@@ -94,19 +102,19 @@ where
                     }
                 }
                 Flow::Normal => {
-                    self.count += 1;
+                    count += 1;
 
                     if branch == 1 {
                         vars[index] = branch;
                         // Update the accumulator.  This only needs to be done in the ones branch
-                        accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a += b);
+                        accumulator.iter_mut().zip(cons).for_each(|(a, b)| *a += &b);
 
                         // Update the current value of the objective
-                        objective += coeff;
+                        objective += &coeff;
 
                         // If we're already not better than the current best objective, then
                         // we can prune this entire branch.
-                        if objective >= self.best {
+                        if objective >= best {
                             state = Flow::Backtrack;
                             continue;
                         } else {
@@ -114,9 +122,9 @@ where
                             // We do not have to check the 0 branch, as the accumulator is not changed there.
                             // If all of constraints are satisfied, then we are fathomed and we can't do any better.
                             if accumulator.iter().all(|x| *x >= T::zero()) {
-                                self.best = objective;
+                                best = objective;
                                 // println!("{objective} {:?}", &vars[..=index]);
-                                self.solution = vars.clone();
+                                solution = vars.clone();
                                 state = Flow::Backtrack;
                                 continue;
                             }
@@ -125,7 +133,7 @@ where
 
                     // This is the same behavior for either a 0 or 1 branch
                     // If there is a potentially feasible descendant, then keep descending the tree
-                    if let Some(ccons) = self.cumulative.get(index) {
+                    if let Some(ccons) = cumulative.get(index) {
                         if accumulator
                             .iter()
                             .zip(ccons)
@@ -142,6 +150,7 @@ where
                 }
             }
         }
+        (objective, count, solution)
     }
 
     fn record(&mut self, label: &str, state: NodeState) {
@@ -182,6 +191,8 @@ where
         cumulative
     }
 }
+
+
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 enum Flow {
