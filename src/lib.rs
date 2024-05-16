@@ -81,15 +81,18 @@ where
     where
         T: std::marker::Send + std::marker::Sync + 'static,
     {
-        let fixed1 = self.fixed.clone();
-        let fixed2 = self.fixed.clone();
+        let fixed = Arc::new(self.fixed.clone());
+        let fixed1 = Arc::clone(&fixed);
+        let fixed2 = Arc::clone(&fixed);
         let global_best = Arc::new(RwLock::new(T::max_value()));
         let gb1 = Arc::clone(&global_best);
         let gb2 = Arc::clone(&global_best);
-        let h1 = std::thread::spawn(move || Self::solve_subtree(1, 0, gb1, &fixed1));
-        let h2 = std::thread::spawn(move || Self::solve_subtree(1, 1, gb2, &fixed2));
-        let (b1, c1, s1) = h1.join().unwrap();
-        let (b2, c2, s2) = h2.join().unwrap();
+        // let h1 = std::thread::spawn(move || Self::solve_subtree(1, 0, gb1, &fixed1));
+        // let h2 = std::thread::spawn(move || Self::solve_subtree(1, 1, gb2, &fixed2));
+        // let (b1, c1, s1) = h1.join().unwrap();
+        // let (b2, c2, s2) = h2.join().unwrap();
+        let (b1, c1, s1) = Self::solve_subtree(1, 0, gb1, &fixed1);
+        let (b2, c2, s2) = Self::solve_subtree(1, 1, gb2, &fixed2);
 
         self.count = c1 + c2;
         if b1 <= b2 {

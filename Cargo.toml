@@ -12,6 +12,7 @@ atomic_float = "1.0.0"
 bit-vec = "0.6.3"
 lp_parser_rs = {git = "https://github.com/dandxy89/lp_parser_rs"}
 num = "0.4.1"
+rayon = "1.10.0"
 serde = { version = "1.0.198", features = ["derive"] }
 serde_json = "1.0.116"
 thiserror = "1.0.52"
