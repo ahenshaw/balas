@@ -10,16 +10,24 @@ type Array<T> = Vec<Vec<T>>;
 
 #[derive(Deserialize, Serialize)]
 pub struct Balas<T> {
-    pub coefficients: Vec<T>,
-    pub constraints: Array<T>,
-    pub rhs: Vec<T>,
-    cumulative: Array<T>,
     pub best: T,
     pub solution: Vec<u8>,
     pub count: usize,
     vars: Vec<String>,
     pub recording: Vec<Record>,
+    pub fixed: Fixed<T>,
 }
+
+/// The unchanging, fixed variables representing the BIP
+#[derive(Deserialize, Serialize)]
+struct Fixed<T> {
+    num_vars: usize,
+    coefficients: Vec<T>,
+    constraints: Array<T>,
+    rhs: Vec<T>,
+    cumulative: Array<T>,
+}
+
 
 impl<T> Balas<T>
 where
@@ -36,16 +44,20 @@ where
 {
     pub fn new(coeff: &[T], constraints: &Array<T>, b: &[T], vars: &Vec<String>) -> Balas<T> {
         let cumulative = Self::make_cumulative(constraints);
-        Balas {
+        let fixed = Fixed{
+            num_vars: coeff.len(),
             coefficients: coeff.to_vec(),
             constraints: constraints.clone(),
             rhs: b.to_vec(),
             cumulative,
+        };
+        Balas {
             best: T::max_value(),
             solution: Vec::new(),
             count: 0,
             vars: vars.to_owned(),
             recording: vec![],
+            fixed,
         }
     }
     pub fn reset(&mut self) {
@@ -58,11 +70,9 @@ where
 
     }
 
-    fn tree(num_vars: usize, start: usize,
-        coefficients: &Vec<T>, constraints: &Array<T>,
-        rhs: &Vec<T>, cumulative: &Array<T>) -> (T, usize, Vec<u8>) {
+    fn tree(start: usize, fixed: &Fixed<T>) -> (T, usize, Vec<u8>) {
 
-        let mut vars: Vec<u8> = vec![0; num_vars];
+        let mut vars: Vec<u8> = vec![0; fixed.num_vars];
         let mut branch = 0u8;
         let mut index = start;
         let mut objective = T::zero();
@@ -74,14 +84,12 @@ where
         // Initialize the constraint accumulator with the negation of the b vector (the
         // right-hand side of the constraints).  This way, we can just compare against 0
         // later on.
-        let mut accumulator: Vec<T> = rhs.iter().map(|&b| -b).collect();
+        let mut accumulator: Vec<T> = fixed.rhs.iter().map(|&b| -b).collect();
 
         loop {
-            // std::thread::sleep(std::time::Duration::from_secs_f32(0.5));
-            // println!("Nun vars: {num_vars}, index: {index}, branch: {branch}, state: {state:?}");
             // Alias the current column of the constraints and grab the coefficients value
-            let cons = &constraints[index];
-            let coeff = coefficients[index];
+            let cons = &fixed.constraints[index];
+            let coeff = fixed.coefficients[index];
 
             match state {
                 Flow::Terminate => break,
@@ -133,7 +141,7 @@ where
 
                     // This is the same behavior for either a 0 or 1 branch
                     // If there is a potentially feasible descendant, then keep descending the tree
-                    if let Some(ccons) = cumulative.get(index) {
+                    if let Some(ccons) = fixed.cumulative.get(index) {
                         if accumulator
                             .iter()
                             .zip(ccons)
