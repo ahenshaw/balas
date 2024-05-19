@@ -202,6 +202,7 @@ where
                                     if let Ok(mut gl) = global_best.try_write() {
                                         if best < * gl {
                                             *gl = best;
+                                            println!("{best}");
                                             break;
                                         }
                                     }

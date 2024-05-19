@@ -34,7 +34,6 @@ struct Args {
     /// num threads
     #[argh(option, short = 't')]
     threads: Option<usize>,
-
 }
 
 fn main() -> Result<()> {
@@ -56,9 +55,15 @@ fn main() -> Result<()> {
             } else {
                 let num_threads = match args.threads {
                     Some(n) => n,
-                    None => 2,
+                    None => match std::thread::available_parallelism() {
+                        Ok(n) => n.into(),
+                        _ => 1usize,
+                    },
                 };
-                balas.solve_mt(num_threads);
+                // num_threads needs to be a power of two
+                let used_threads = 1usize << num_threads.ilog2();
+                println!("Using {used_threads} thread{}", if used_threads != 1 {"s"} else {""});
+                balas.solve_mt(used_threads);
             }
         }
     }
