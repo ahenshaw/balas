@@ -6,6 +6,8 @@ use num::Bounded;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 use std::{fmt::Display, ops::Neg};
+use rayon::prelude::*;
+
 
 type Array<T> = Vec<Vec<T>>;
 
@@ -32,6 +34,7 @@ struct Fixed<T> {
 impl<T> Balas<T>
 where
     T: Bounded
+        + std::convert::Into<f64>
         + Neg
         + Copy
         + Display
@@ -77,31 +80,26 @@ where
     }
 
     /// multi-threaded solver
-    pub fn solve_mt(&mut self, _num_threads: usize)
+    pub fn solve_mt(&mut self, num_threads: usize)
     where
         T: std::marker::Send + std::marker::Sync + 'static,
     {
         let fixed = Arc::new(self.fixed.clone());
-        let fixed1 = Arc::clone(&fixed);
-        let fixed2 = Arc::clone(&fixed);
         let global_best = Arc::new(RwLock::new(T::max_value()));
-        let gb1 = Arc::clone(&global_best);
-        let gb2 = Arc::clone(&global_best);
-        let h1 = std::thread::spawn(move || Self::solve_subtree(1, 0, gb1, &fixed1));
-        let h2 = std::thread::spawn(move || Self::solve_subtree(1, 1, gb2, &fixed2));
-        let (b1, c1, s1) = h1.join().unwrap();
-        let (b2, c2, s2) = h2.join().unwrap();
-        // let (b1, c1, s1) = Self::solve_subtree(1, 0, gb1, &fixed1);
-        // let (b2, c2, s2) = Self::solve_subtree(1, 1, gb2, &fixed2);
-
-        self.count = c1 + c2;
-        if b1 <= b2 {
-            self.best = b1;
-            self.solution = s1;
-        } else {
-            self.best = b2;
-            self.solution = s2;
-        };
+        let start_index = num_threads.ilog2() as usize;
+        let handles: Vec<(T, usize, Vec<u8>)> = (0..num_threads).into_par_iter().map(|i| {
+            let f = Arc::clone(&fixed);
+            let gb = Arc::clone(&global_best);
+            Self::solve_subtree(start_index, i, gb, &f)
+        }).collect();
+        for handle in handles {
+            let (best, count, solution) = handle;
+            self.count += count;
+            if best < self.best {
+                self.solution = solution;
+                self.best = best;
+            }
+        }
     }
 
     fn init_subtree(start_var_index: usize, tree_index: usize, fixed: &Fixed<T>) -> (Vec<T>, T) {
@@ -139,7 +137,7 @@ where
         let mut var_index = start_var_index;
         let mut state = Flow::Normal;
         let mut count = 0usize;
-        let mut best: T = *global_best.read().unwrap();
+        let mut best = T::max_value();
         let mut solution = Vec::<u8>::new();
 
         let (mut accumulator, mut objective) =
@@ -147,7 +145,10 @@ where
 
         let mut branch = 0u8;
 
+        let mut min_index = usize::MAX;
+
         loop {
+            min_index = min_index.min(var_index);
             // Alias the current column of the constraints and grab the coefficients value
             let constraints = &fixed.constraints[var_index];
             let coefficient = fixed.coefficients[var_index];
@@ -177,7 +178,7 @@ where
                     count += 1;
 
                     if branch == 1 {
-                        vars[var_index] = branch;
+                        vars[var_index] = 1;
                         // Update the accumulator.  This only needs to be done in the ones branch
                         accumulator
                             .iter_mut()
@@ -187,17 +188,7 @@ where
                         // Update the current value of the objective
                         objective += &coefficient;
 
-                        // If we're already not better than the current best objective, then
-                        // we can prune this entire branch.
-                        if (objective >= best)
-                            && (objective
-                                >= match global_best.try_read() {
-                                    Ok(gl) => {
-                                        best = *gl;
-                                        best
-                                    }
-                                    _ => best,
-                                })
+                        if (objective >= best) || (objective >= *global_best.read().unwrap())
                         {
                             state = Flow::Backtrack;
                             continue;
@@ -207,10 +198,14 @@ where
                             // If all of constraints are satisfied, then we are fathomed and we can't do any better.
                             if accumulator.iter().all(|x| *x >= T::zero()) {
                                 best = objective;
-                                if let Ok(mut gl) = global_best.try_write() {
-                                    *gl = best;
+                                loop {
+                                    if let Ok(mut gl) = global_best.try_write() {
+                                        if best < * gl {
+                                            *gl = best;
+                                            break;
+                                        }
+                                    }
                                 }
-
                                 // println!("{objective} {:?}", &vars[..=index]);
                                 solution = vars.clone();
                                 state = Flow::Backtrack;
@@ -252,9 +247,14 @@ where
         if self.best != T::max_value() {
             println!("Optimal value: {}", self.best);
             println!("Solution:");
-            for (var, value) in self.vars.iter().zip(self.solution.iter()) {
-                println!("  {var}: {}", value);
+            // for (var, value) in self.vars.iter().zip(self.solution.iter()) {
+            //     println!("  {var}: {}", value);
+            // }
+            for (i, value) in self.solution.iter().enumerate() {
+                print!("{value}");
+                if i % 4 == 3 {print!(" ")}
             }
+            println!("");
         } else {
             println!("No solution");
         }

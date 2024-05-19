@@ -31,6 +31,10 @@ struct Args {
     /// single-threaded mode
     #[argh(switch, short = 's')]
     single: bool,
+    /// num threads
+    #[argh(option, short = 't')]
+    threads: Option<usize>,
+
 }
 
 fn main() -> Result<()> {
@@ -50,7 +54,11 @@ fn main() -> Result<()> {
             if args.single {
                 balas.solve()
             } else {
-                balas.solve_mt(2);
+                let num_threads = match args.threads {
+                    Some(n) => n,
+                    None => 2,
+                };
+                balas.solve_mt(num_threads);
             }
         }
     }

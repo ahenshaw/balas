@@ -6,6 +6,7 @@ use std::{fmt::Display, io::Write, ops::Neg};
 impl<T> Balas<T>
 where
     T: Bounded
+        + std::convert::Into<f64>
         + Neg
         + Copy
         + Display
