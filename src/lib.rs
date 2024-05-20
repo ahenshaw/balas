@@ -102,7 +102,6 @@ where
         // to init a subtree, we need to calculate the state for all of the ancestor nodes (if any)
 
         for var_index in 0..start_var_index {
-            // let branch = tree_index >> (start_var_index - var_index - 1) & 1;
             let branch = (branches & 1) as u8;
             let constraints = &fixed.constraints[var_index];
             let coefficient = fixed.coefficients[var_index];
