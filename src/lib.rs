@@ -242,9 +242,6 @@ where
         if self.best != T::max_value() {
             println!("Optimal value: {}", self.best);
             println!("Solution:");
-            // for (var, value) in self.vars.iter().zip(self.solution.iter()) {
-            //     println!("  {var}: {}", value);
-            // }
             for (i, value) in self.solution.iter().enumerate() {
                 print!("{value}");
                 if i % 4 == 3 {print!(" ")}
