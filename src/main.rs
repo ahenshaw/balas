@@ -7,18 +7,19 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 #[derive(FromArgs)]
+#[argh(help_triggers("-h", "--help"))]
 /// Solve a Binary-Variable Linear Program
 struct Args {
     /// input file in LP format
     #[argh(positional)]
     infile: PathBuf,
 
-    /// how many repetitions (for timing)
-    #[argh(option, short = 'r', default = "1")]
-    reps: usize,
+    /// number of threads to use
+    #[argh(option, short = 't')]
+    threads: Option<usize>,
 
     /// optional recording file
-    #[argh(option)]
+    #[argh(option, short = 'o')]
     outfile: Option<PathBuf>,
 
     /// use this heuristic pre-solve
@@ -28,12 +29,6 @@ struct Args {
     /// use the original recursive code
     #[argh(switch)]
     recursive: bool,
-    /// single-threaded mode
-    #[argh(switch, short = 's')]
-    single: bool,
-    /// num threads
-    #[argh(option, short = 't')]
-    threads: Option<usize>,
 }
 
 fn main() -> Result<()> {
@@ -42,19 +37,14 @@ fn main() -> Result<()> {
     let mut balas = Balas::from_lp(&args.infile)?;
 
     let start = Instant::now();
-    for _ in 0..args.reps {
-        balas.reset();
         if let Some(heuristic) = args.heuristic {
-            balas.best = heuristic.into();
+            balas.best = heuristic;
         }
         if args.recursive {
             balas.solve_recursively();
         } else {
-            if args.single {
-                balas.solve()
-            } else {
                 let num_threads = match args.threads {
-                    Some(n) => n,
+                    Some(n) => n.max(1),
                     None => match std::thread::available_parallelism() {
                         Ok(n) => n.into(),
                         _ => 1usize,
@@ -63,20 +53,19 @@ fn main() -> Result<()> {
                 // num_threads needs to be a power of two
                 let used_threads = 1usize << num_threads.ilog2();
                 println!("Using {used_threads} thread{}", if used_threads != 1 {"s"} else {""});
-                balas.solve_mt(used_threads);
-            }
+                balas.solve(used_threads);
         }
-    }
     println!(
-        "Elapsed time: {:?} (repetitions: {})",
+        "Elapsed time: {:?}",
         Instant::now() - start,
-        args.reps
     );
+
     balas.report();
+
     if let Some(outfile) = args.outfile {
         let mut out = File::create(outfile)?;
         let buf = serde_json::to_string(&balas)?;
-        out.write(buf.as_bytes())?;
+        let _ = out.write(buf.as_bytes())?;
     }
 
     Ok(())

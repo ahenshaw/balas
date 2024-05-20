@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.77"
-argh = "0.1.12"
+argh = {git = "https://github.com/google/argh"}
 atomic_float = "1.0.0"
 bit-vec = "0.6.3"
 lp_parser_rs = {git = "https://github.com/dandxy89/lp_parser_rs"}

@@ -63,35 +63,22 @@ where
             fixed,
         }
     }
-    pub fn reset(&mut self) {
-        self.count = 0;
-        self.best = T::max_value();
-        self.solution = Vec::new();
-    }
-
-    /// single-threaded solver
-    pub fn solve(&mut self) {
-        let global_best = Arc::new(RwLock::new(T::max_value()));
-
-        let (best, count, solution) = Self::solve_subtree(0, 0, global_best, &self.fixed);
-        self.best = best;
-        self.count = count;
-        self.solution = solution;
-    }
 
     /// multi-threaded solver
-    pub fn solve_mt(&mut self, num_threads: usize)
+    pub fn solve(&mut self, num_threads: usize)
     where
         T: std::marker::Send + std::marker::Sync + 'static,
     {
         let fixed = Arc::new(self.fixed.clone());
-        let global_best = Arc::new(RwLock::new(T::max_value()));
+        let global_best = Arc::new(RwLock::new(self.best));
         let start_index = num_threads.ilog2() as usize;
+
         let handles: Vec<(T, usize, Vec<u8>)> = (0..num_threads).into_par_iter().map(|i| {
             let f = Arc::clone(&fixed);
             let gb = Arc::clone(&global_best);
             Self::solve_subtree(start_index, i, gb, &f)
         }).collect();
+
         for handle in handles {
             let (best, count, solution) = handle;
             self.count += count;
@@ -102,16 +89,21 @@ where
         }
     }
 
-    fn init_subtree(start_var_index: usize, tree_index: usize, fixed: &Fixed<T>) -> (Vec<T>, T) {
+    fn init_subtree(start_var_index: usize, tree_index: usize, fixed: &Fixed<T>) -> (Vec<T>, T, Vec<u8>) {
         // Initialize the constraint accumulator with the negation of the b vector (the
         // right-hand side of the constraints).  This way, we can just compare against 0
         // later on.
         let mut accumulator: Vec<T> = fixed.rhs.iter().map(|&b| -b).collect();
         let mut objective = T::zero();
 
+        let mut branches = tree_index;
+        let mut vars = vec![];
+
         // to init a subtree, we need to calculate the state for all of the ancestor nodes (if any)
+
         for var_index in 0..start_var_index {
-            let branch = tree_index >> (start_var_index - var_index - 1) & 1;
+            // let branch = tree_index >> (start_var_index - var_index - 1) & 1;
+            let branch = (branches & 1) as u8;
             let constraints = &fixed.constraints[var_index];
             let coefficient = fixed.coefficients[var_index];
 
@@ -120,11 +112,13 @@ where
                 accumulator
                     .iter_mut()
                     .zip(constraints)
-                    .for_each(|(a, b)| *a += &b);
+                    .for_each(|(a, b)| *a += b);
             }
+            vars.push(branch);
+            branches >>= 1;
         }
 
-        (accumulator, objective)
+        (accumulator, objective, vars)
     }
 
     fn solve_subtree(
@@ -133,15 +127,15 @@ where
         global_best: Arc<RwLock<T>>,
         fixed: &Fixed<T>,
     ) -> (T, usize, Vec<u8>) {
-        let mut vars: Vec<u8> = vec![0; fixed.num_vars];
         let mut var_index = start_var_index;
         let mut state = Flow::Normal;
         let mut count = 0usize;
         let mut best = T::max_value();
         let mut solution = Vec::<u8>::new();
 
-        let (mut accumulator, mut objective) =
-            Self::init_subtree(start_var_index, tree_index, &fixed);
+        let (mut accumulator, mut objective, mut vars) =
+            Self::init_subtree(start_var_index, tree_index, fixed);
+        vars.resize(fixed.num_vars, 0);
 
         let mut branch = 0u8;
 
@@ -164,7 +158,7 @@ where
                             accumulator
                                 .iter_mut()
                                 .zip(constraints)
-                                .for_each(|(a, b)| *a -= &b);
+                                .for_each(|(a, b)| *a -= b);
                             objective -= &coefficient;
                             vars[var_index] = 0;
                             var_index -= 1;
@@ -183,7 +177,7 @@ where
                         accumulator
                             .iter_mut()
                             .zip(constraints)
-                            .for_each(|(a, b)| *a += &b);
+                            .for_each(|(a, b)| *a += b);
 
                         // Update the current value of the objective
                         objective += &coefficient;
@@ -208,7 +202,7 @@ where
                                     }
                                 }
                                 // println!("{objective} {:?}", &vars[..=index]);
-                                solution = vars.clone();
+                                solution.clone_from(&vars);
                                 state = Flow::Backtrack;
                                 continue;
                             }
@@ -255,7 +249,7 @@ where
                 print!("{value}");
                 if i % 4 == 3 {print!(" ")}
             }
-            println!("");
+            println!();
         } else {
             println!("No solution");
         }
